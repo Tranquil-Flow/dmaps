@@ -385,6 +385,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.documentfile)
     implementation(libs.android.material)
     // Fix for app/organicmaps/util/FileUploadWorker.java:14: error: cannot access ListenableFuture

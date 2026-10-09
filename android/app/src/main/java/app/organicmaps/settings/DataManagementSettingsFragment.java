@@ -1,6 +1,7 @@
 package app.organicmaps.settings;
 import androidx.annotation.Keep;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import androidx.annotation.NonNull;
@@ -28,6 +29,16 @@ public class DataManagementSettingsFragment extends BaseXmlSettingsFragment
     initStoragePrefCallbacks();
     initBackupPrefCallback();
     initAutoDownloadPrefsCallbacks();
+    initTimetablePrefCallback();
+  }
+
+  private void initTimetablePrefCallback()
+  {
+    final Preference pref = getPreference(getString(R.string.pref_timetable));
+    pref.setOnPreferenceClickListener(preference -> {
+      startActivity(new Intent(requireActivity(), app.organicmaps.transit.TimetableActivity.class));
+      return true;
+    });
   }
 
   private void initStoragePrefCallbacks()

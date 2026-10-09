@@ -66,6 +66,7 @@ androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidxConstraintLayout" }
 androidx-car-app-projected = { module = "androidx.car.app:app-projected", version.ref = "androidxCarApp" }
 androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "androidxLifecycleProcess" }
+androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidxLifecycleProcess" }
 
 [plugins]
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

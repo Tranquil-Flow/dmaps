@@ -15,6 +15,12 @@
     android:title="@string/pref_backup_title"
     app:icon="@drawable/ic_settings_backup_restore"
     app:singleLineTitle="false" />
+  <Preference
+    android:key="@string/pref_timetable"
+    android:persistent="false"
+    android:summary="@string/transit_settings_summary"
+    android:title="@string/transit_title"
+    app:singleLineTitle="false" />
   <SwitchPreferenceCompat
     android:key="@string/pref_autodownload"
     android:title="@string/autodownload"
