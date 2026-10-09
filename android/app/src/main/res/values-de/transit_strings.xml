@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Offline-Timetable-Pilot (CoMaps Deutschland / VBB). Sprache: Deutsch. -->
+  <string name="transit_title">Fahrplan</string>
+  <string name="transit_settings_summary">Offline-Fahrplanpaket importieren und geplante Abfahrten ohne Netzwerkverbindung anzeigen.</string>
+  <string name="transit_import_pack">Fahrplanpaket importieren</string>
+  <string name="transit_remove_pack">Paket entfernen</string>
+  <string name="transit_search">Suchen</string>
+  <string name="transit_search_hint">Bahnhof oder Gleis/Steig</string>
+  <string name="transit_nearby_stops">Haltestellen in der Nähe</string>
+  <string name="transit_refresh">Abfahrten aktualisieren</string>
+  <string name="transit_working">Wird bearbeitet…</string>
+  <string name="transit_no_pack">Kein Fahrplanpaket installiert. Importiere eine .ctpack-Datei, um Fahrpläne offline zu nutzen.</string>
+  <string name="transit_no_results">Keine passenden Bahnhöfe oder Gleise gefunden.</string>
+  <string name="transit_no_departures">Keine planmäßigen Abfahrten im nächsten Zeitfenster.</string>
+  <string name="transit_error_generic">Das Fahrplanpaket konnte nicht gelesen werden. Es ist möglicherweise unvollständig oder beschädigt.</string>
+  <string name="transit_error_no_document_picker">Es ist keine Dateiauswahl verfügbar, um ein Paket zu wählen.</string>
+  <string name="transit_import_failed">Import fehlgeschlagen. Ein vorhandenes Paket wurde beibehalten.</string>
+  <string name="transit_pack_info">Details zum Fahrplanpaket</string>
+  <string name="transit_attribution">Datenquellen- und Lizenzangaben</string>
+  <string name="transit_status">Status</string>
+  <string name="transit_pack_line">Fahrplanpaket: %1$s · gültig %2$s bis %3$s</string>
+  <string name="transit_pack_expired">Dieses Paket ist abgelaufen; Fahrpläne können veraltet sein.</string>
+  <string name="transit_pack_not_yet_valid">Dieses Paket ist noch nicht gültig; Fahrpläne beginnen in der Zukunft.</string>
+  <string name="transit_unsigned_pack_disclosure">Unsigniertes Entwicklungspaket: Integrität geprüft, Herkunft nicht zertifiziert.</string>
+  <string name="transit_attribution_line">Daten: %1$s · Lizenz: %2$s (%3$s) · Zeitfenster bis zu %4$d Stunden</string>
+  <string name="transit_platform">Gleis/Steig %1$s</string>
+  <string name="transit_station">Bahnhof</string>
+  <string name="transit_reservation_required">Reservierung oder vorherige Absprache erforderlich</string>
+  <string name="transit_approximate_time">Ungefähre Zeit</string>
+  <string name="transit_scheduled_only">Fahrplan</string>
+  <string name="transit_departure_row">Linie %1$s nach %2$s, Abfahrt %3$s</string>
+  <string name="transit_stop_row">Haltestelle %1$s</string>
+</resources>

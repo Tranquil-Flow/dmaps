@@ -477,6 +477,10 @@
     <activity
         android:name="app.organicmaps.MapPlaceholderActivity"/>
     <activity
+        android:name="app.organicmaps.transit.TimetableActivity"
+        android:exported="false"
+        android:label="@string/transit_title"/>
+    <activity
         android:name="app.organicmaps.car.screens.permissions.RequestPermissionsActivity"/>
     <service
         android:name="app.organicmaps.car.CarAppService"

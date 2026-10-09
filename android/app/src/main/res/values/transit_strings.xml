@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Offline timetable pilot (CoMaps Germany / VBB). Language: English. -->
+  <string name="transit_title">Timetable</string>
+  <string name="transit_settings_summary">Import an offline timetable pack and view scheduled departures without a network connection.</string>
+  <string name="transit_import_pack">Import timetable pack</string>
+  <string name="transit_remove_pack">Remove pack</string>
+  <string name="transit_search">Search</string>
+  <string name="transit_search_hint">Station or platform</string>
+  <string name="transit_nearby_stops">Stops near this place</string>
+  <string name="transit_refresh">Refresh departures</string>
+  <string name="transit_working">Working…</string>
+  <string name="transit_no_pack">No timetable pack installed. Import a .ctpack file to use offline schedules.</string>
+  <string name="transit_no_results">No matching stations or platforms.</string>
+  <string name="transit_no_departures">No scheduled departures in the next service window.</string>
+  <string name="transit_error_generic">The timetable pack could not be read. It may be incomplete or damaged.</string>
+  <string name="transit_error_no_document_picker">No file picker is available to choose a pack.</string>
+  <string name="transit_import_failed">Import failed. The previous pack, if any, was kept.</string>
+  <string name="transit_pack_info">Timetable pack details</string>
+  <string name="transit_attribution">Data attribution and license</string>
+  <string name="transit_status">Status</string>
+  <string name="transit_pack_line">Timetable pack: %1$s · valid %2$s to %3$s</string>
+  <string name="transit_pack_expired">This pack has expired; schedules may be outdated.</string>
+  <string name="transit_pack_not_yet_valid">This pack is not yet valid; schedules start in the future.</string>
+  <string name="transit_unsigned_pack_disclosure">Unsigned development pack: integrity is checked, provenance is not certified.</string>
+  <string name="transit_attribution_line">Data: %1$s · License: %2$s (%3$s) · Service window up to %4$d hours</string>
+  <string name="transit_platform">Platform %1$s</string>
+  <string name="transit_station">Station</string>
+  <string name="transit_reservation_required">Reservation or advance coordination required</string>
+  <string name="transit_approximate_time">Approximate time</string>
+  <string name="transit_scheduled_only">Scheduled</string>
+  <string name="transit_departure_row">Line %1$s to %2$s, departure %3$s</string>
+  <string name="transit_stop_row">Stop %1$s</string>
+</resources>
