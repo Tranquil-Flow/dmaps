@@ -15,11 +15,14 @@ public final class Departure
   public final Instant when;
   public final String timezone;
   public final long stopId;
+  /** GTFS stop_id of the platform serving this departure; realtime join key. */
+  public final String stopSourceId;
   public final String serviceDate; // ISO yyyy-MM-dd
 
   public Departure(String tripSourceId, String line, String destination, String stopName,
                    String platform, int routeType, int pickupType, Integer timepoint,
-                   Instant when, String timezone, long stopId, String serviceDate)
+                   Instant when, String timezone, long stopId, String stopSourceId,
+                   String serviceDate)
   {
     this.tripSourceId = tripSourceId;
     this.line = line;
@@ -32,6 +35,7 @@ public final class Departure
     this.when = when;
     this.timezone = timezone;
     this.stopId = stopId;
+    this.stopSourceId = stopSourceId;
     this.serviceDate = serviceDate;
   }
 

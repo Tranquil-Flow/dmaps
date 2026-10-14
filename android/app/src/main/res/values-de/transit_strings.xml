@@ -31,4 +31,20 @@
   <string name="transit_scheduled_only">Fahrplan</string>
   <string name="transit_departure_row">Linie %1$s nach %2$s, Abfahrt %3$s</string>
   <string name="transit_stop_row">Haltestelle %1$s</string>
+  <!-- Echtzeit-Overlay (Live-Toggle, standardmäßig aus). -->
+  <string name="transit_live_toggle">Echtzeit-Updates</string>
+  <string name="transit_live_on_time">live · pünktlich</string>
+  <string name="transit_live_delayed">live · +%1$ds</string>
+  <string name="transit_live_canceled">FAHRT FÄLLT AUS</string>
+  <string name="transit_live_stale">veraltet</string>
+  <string name="transit_live_coverage">Echtzeitdaten für %1$d von %2$d Zeilen</string>
+  <string name="transit_live_off">Echtzeit-Updates aus</string>
+  <string name="transit_live_error">Echtzeit-Updates nicht verfügbar: %1$s</string>
+  <string name="transit_live_region_all">Gesamtes Netz</string>
+  <!-- Echtzeit-Overlay: begrenzte Fehlerursachen. Niemals roher Ausnahmetext. -->
+  <string name="transit_live_no_board">Wähle eine Haltestelle aus, bevor du Echtzeitdaten anforderst.</string>
+  <string name="transit_live_reason_offline">keine Verbindung</string>
+  <string name="transit_live_reason_timeout">Zeitüberschreitung</string>
+  <string name="transit_live_reason_bad_feed">Datenstrom unlesbar</string>
+  <string name="transit_live_reason_refused">vom Relay abgelehnt</string>
 </resources>

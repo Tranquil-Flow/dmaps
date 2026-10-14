@@ -432,7 +432,7 @@ public final class TimetableRepository implements AutoCloseable
             "SELECT t.source_id, r.short_name," +
             " COALESCE(NULLIF(st.stop_headsign,''), t.headsign)," +
             " sp.name, sp.platform, r.route_type, st.pickup_type, st.timepoint," +
-            " st.departure_seconds, sd.service_date, st.stop_id" +
+            " st.departure_seconds, sd.service_date, st.stop_id, sp.source_id" +
             " FROM stop_times st" +
             " JOIN trips t ON t.id = st.trip_id" +
             " JOIN routes r ON r.id = t.route_id" +
@@ -452,7 +452,7 @@ public final class TimetableRepository implements AutoCloseable
           merged.add(new Departure(c.getString(0), c.getString(1), c.getString(2),
               c.getString(3), c.getString(4), c.getInt(5), c.getInt(6),
               c.isNull(7) ? null : c.getInt(7), when, mZone.getId(),
-              c.getLong(10), LocalDate.of(y, mo, da).toString()));
+              c.getLong(10), c.getString(11), LocalDate.of(y, mo, da).toString()));
         }
         c.close();
       }

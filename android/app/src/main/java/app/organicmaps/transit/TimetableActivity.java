@@ -17,6 +17,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,10 +27,15 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import app.organicmaps.sdk.transit.Departure;
 import app.organicmaps.sdk.transit.Stop;
+import app.organicmaps.sdk.transit.rt.RealtimeMerger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Offline timetable pilot activity: pack import/remove (SAF), manual station search,
@@ -40,6 +46,12 @@ import java.util.Locale;
 public class TimetableActivity extends AppCompatActivity
 {
   private static final int REQ_IMPORT_PACK = 47001;
+
+  /** Livefeed relay on the emulator host (10.0.2.2 = host loopback alias). */
+  private static final String LIVE_RELAY_BASE = "http://10.0.2.2:8099";
+  private static final String LIVE_REGION = "all";
+  /** Matches the board horizon (BOARD_HORIZON_MINUTES = 180). */
+  private static final int LIVE_HORIZON_SEC = 3 * 3600;
 
   private static final String EXTRA_LAT = "transit.extra.lat";
   private static final String EXTRA_LON = "transit.extra.lon";
@@ -67,12 +79,27 @@ public class TimetableActivity extends AppCompatActivity
   private Button mImportBtn;
   private Button mRemoveBtn;
   private Button mRefreshBtn;
+  private Button mLiveToggle;
+  private TextView mLiveStatusLine;
   private TextView mStatusLine;
   private TextView mPackLine;
   private TextView mAttributionLine;
   private RecyclerView mList;
   private BoardAdapter mAdapter;
   private int mLastBoundRevision = -1;
+
+  // -- Opt-in realtime overlay state (main thread only) ----------------------
+  private boolean mLiveOn = false;             // default OFF: live = network
+  private boolean mNeedLiveFetch = false;      // board reloaded while live on
+  private int mLiveGen;                        // discards out-of-order fetches
+  private ExecutorService mLiveExecutor;
+  private final Map<String, RealtimeMerger.DepartureRow> mLiveRows = new HashMap<>();
+  private int mLiveCoverage;                   // rows with resolvable live data
+  private int mLiveBoardCount;                 // board rows at fetch time
+  /** Bounded localized failure reason; 0 = none. Never raw endpoint text. */
+  private int mLiveErrorRes;
+  /** Relay ETag echoed as If-None-Match so an unchanged slice costs a 304. */
+  private String mLiveEtag;
 
   @Override
   protected void onCreate(@Nullable Bundle savedInstanceState)
@@ -201,9 +228,29 @@ public class TimetableActivity extends AppCompatActivity
     mRefreshBtn.setId(View.generateViewId());
     mRefreshBtn.setText(R.string.transit_refresh);
     mRefreshBtn.setContentDescription(getString(R.string.transit_refresh));
-    mRefreshBtn.setOnClickListener(v -> mModel.refreshBoard());
+    mRefreshBtn.setOnClickListener(v -> {
+      mModel.refreshBoard();
+      // If live is on, re-join the reloaded board once it arrives in bind().
+      if (mLiveOn)
+        mNeedLiveFetch = true;
+    });
     root.addView(mRefreshBtn, new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+    // Opt-in live overlay: default OFF because live data makes network calls.
+    mLiveToggle = new Button(c);
+    mLiveToggle.setId(View.generateViewId());
+    mLiveToggle.setText(R.string.transit_live_toggle);
+    mLiveToggle.setContentDescription(getString(R.string.transit_live_toggle));
+    mLiveToggle.setOnClickListener(v -> onLiveToggle());
+    root.addView(mLiveToggle, new LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+    mLiveStatusLine = new TextView(c);
+    mLiveStatusLine.setId(View.generateViewId());
+    mLiveStatusLine.setTextSize(12f);
+    mLiveStatusLine.setText(R.string.transit_live_off);
+    root.addView(mLiveStatusLine);
 
     mList = new RecyclerView(c);
     mList.setId(View.generateViewId());
@@ -329,6 +376,8 @@ public class TimetableActivity extends AppCompatActivity
 
     // Board / candidates list
     mRefreshBtn.setVisibility(s.selectedStop != null ? View.VISIBLE : View.GONE);
+    mLiveToggle.setVisibility(s.selectedStop != null ? View.VISIBLE : View.GONE);
+    mLiveStatusLine.setVisibility(s.selectedStop != null ? View.VISIBLE : View.GONE);
     mAdapter.setShowBoard(s.selectedStop != null);
     List<Object> rows = new ArrayList<>();
     if (s.selectedStop != null)
@@ -336,6 +385,152 @@ public class TimetableActivity extends AppCompatActivity
     else
       rows.addAll(filterBoardingCandidates(s.candidates));
     mAdapter.submit(rows);
+
+    // A board arrived while live was on (toggle or explicit refresh): join it once.
+    if (mNeedLiveFetch && s.selectedStop != null && !s.board.isEmpty())
+    {
+      mNeedLiveFetch = false;
+      fetchLive(s.board);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Opt-in realtime overlay: one fetch per toggle/refresh, no polling loop.
+  // ---------------------------------------------------------------------
+  @MainThread
+  private void onLiveToggle()
+  {
+    mLiveOn = !mLiveOn;
+    if (mLiveOn)
+    {
+      TimetableViewModel.ScreenState s = mModel.getState().getValue();
+      if (s != null && s.selectedStop != null && !s.board.isEmpty())
+        fetchLive(s.board);
+      else
+        updateLiveStatusLine();
+      return;
+    }
+    // OFF: live claims must vanish immediately; rows fall back to scheduled.
+    mLiveGen++; // discard any in-flight fetch result
+    mNeedLiveFetch = false;
+    mLiveRows.clear();
+    mLiveCoverage = 0;
+    mLiveBoardCount = 0;
+    mLiveErrorRes = 0;
+    mLiveEtag = null;
+    updateLiveStatusLine();
+    mAdapter.notifyDataSetChanged();
+  }
+
+  /** Fetches the relay slice on a background thread and merges it onto the board. */
+  @MainThread
+  private void fetchLive(@NonNull List<Departure> board)
+  {
+    final List<RealtimeMerger.ScheduledRow> scheduled = new ArrayList<>(board.size());
+    final java.util.HashSet<String> tripIds = new java.util.HashSet<>();
+    for (Departure d : board)
+    {
+      if (d.tripSourceId == null)
+        continue;
+      tripIds.add(d.tripSourceId);
+      scheduled.add(new RealtimeMerger.ScheduledRow(d.tripSourceId, d.line, d.destination,
+          d.platform, d.when.getEpochSecond(), d.stopSourceId));
+    }
+    if (tripIds.isEmpty())
+      return;
+    if (mLiveExecutor == null)
+    {
+      mLiveExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "timetable-live-fetch");
+        t.setDaemon(true);
+        return t;
+      });
+    }
+    final int gen = ++mLiveGen;
+    final int boardCount = board.size();
+    final String etag = mLiveEtag;
+    mLiveErrorRes = 0;
+    mLiveStatusLine.setText(R.string.transit_working);
+    mLiveExecutor.execute(() -> {
+      RealtimeClient.Result res = RealtimeClient.fetchAndJoin(
+          LIVE_RELAY_BASE, LIVE_REGION, LIVE_HORIZON_SEC, tripIds, etag);
+      List<RealtimeMerger.DepartureRow> merged = null;
+      if (res.ok() && !res.notModified)
+      {
+        merged = RealtimeMerger.mergeBoard(scheduled, res.joined, res.feedTimestamp,
+            System.currentTimeMillis() / 1000L,
+            RealtimeMerger.DEFAULT_DELAY_THRESHOLD_SECONDS,
+            RealtimeMerger.DEFAULT_STALE_AFTER_SECONDS);
+      }
+      final List<RealtimeMerger.DepartureRow> rows = merged;
+      final boolean unchanged = res.notModified;
+      final String newEtag = res.etag;
+      new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+        if (!mLiveOn || gen != mLiveGen)
+          return; // toggled off or superseded while fetching
+        mLiveEtag = newEtag;
+        if (unchanged)
+        {
+          // 304: the slice did not change, so the rows already held are still
+          // correct. Not the same as "the relay had nothing".
+          updateLiveStatusLine();
+          return;
+        }
+        mLiveRows.clear();
+        mLiveCoverage = 0;
+        mLiveBoardCount = boardCount;
+        if (rows != null)
+        {
+          for (RealtimeMerger.DepartureRow row : rows)
+          {
+            mLiveRows.put(row.tripSourceId, row);
+            if (row.hasLiveData())
+              mLiveCoverage++;
+          }
+          mLiveErrorRes = 0;
+        }
+        else
+        {
+          mLiveErrorRes = res.errorRes;
+        }
+        updateLiveStatusLine();
+        mAdapter.notifyDataSetChanged();
+      });
+    });
+  }
+
+  /** Coverage / freshness / error line for the live overlay. */
+  @MainThread
+  private void updateLiveStatusLine()
+  {
+    if (!mLiveOn)
+    {
+      mLiveStatusLine.setText(R.string.transit_live_off);
+      return;
+    }
+    if (mLiveErrorRes != 0)
+    {
+      // A fixed localized reason; never the endpoint's own text on screen.
+      mLiveStatusLine.setText(
+          getString(R.string.transit_live_error, getString(mLiveErrorRes)));
+      return;
+    }
+    if (mLiveRows.isEmpty())
+      return; // fetch in flight or nothing to show yet
+    mLiveStatusLine.setText(getString(R.string.transit_live_coverage,
+        mLiveCoverage, mLiveBoardCount) + "  ·  "
+        + getString(R.string.transit_live_region_all));
+  }
+
+  @Override
+  protected void onDestroy()
+  {
+    if (mLiveExecutor != null)
+    {
+      mLiveExecutor.shutdownNow();
+      mLiveExecutor = null;
+    }
+    super.onDestroy();
   }
 
   /**
@@ -426,7 +621,36 @@ public class TimetableActivity extends AppCompatActivity
         sb.append("  · ").append(getString(R.string.transit_reservation_required));
       if (d.timepoint != null && d.timepoint == 0)
         sb.append("  · ").append(getString(R.string.transit_approximate_time));
-      sb.append("  · ").append(getString(R.string.transit_scheduled_only));
+      // Key invariant: absent live data is NEVER rendered as live or cancelled.
+      RealtimeMerger.DepartureRow live =
+          d.tripSourceId == null ? null : mLiveRows.get(d.tripSourceId);
+      if (live != null && live.hasLiveData())
+      {
+        switch (live.state)
+        {
+          case CANCELED:
+            sb.append("  · ").append(getString(R.string.transit_live_canceled));
+            break;
+          case DELAYED:
+          {
+            long delaySec = live.delaySeconds != null ? live.delaySeconds
+                : (live.liveDeparture != null
+                    ? live.liveDeparture - live.scheduledDeparture : 0L);
+            sb.append("  · ").append(getString(R.string.transit_live_delayed, (int) delaySec));
+            break;
+          }
+          case LIVE:
+          default:
+            sb.append("  · ").append(getString(R.string.transit_live_on_time));
+            break;
+        }
+        if (live.stale)
+          sb.append(" · ").append(getString(R.string.transit_live_stale));
+      }
+      else
+      {
+        sb.append("  · ").append(getString(R.string.transit_scheduled_only));
+      }
       return sb.toString();
     }
 

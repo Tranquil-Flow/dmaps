@@ -31,4 +31,20 @@
   <string name="transit_scheduled_only">Scheduled</string>
   <string name="transit_departure_row">Line %1$s to %2$s, departure %3$s</string>
   <string name="transit_stop_row">Stop %1$s</string>
+  <!-- Realtime overlay (opt-in live toggle). -->
+  <string name="transit_live_toggle">Live updates</string>
+  <string name="transit_live_on_time">live · on time</string>
+  <string name="transit_live_delayed">live · +%1$ds</string>
+  <string name="transit_live_canceled">CANCELLED</string>
+  <string name="transit_live_stale">stale</string>
+  <string name="transit_live_coverage">Live data covers %1$d of %2$d rows</string>
+  <string name="transit_live_off">Live updates off</string>
+  <string name="transit_live_error">Live updates unavailable: %1$s</string>
+  <string name="transit_live_region_all">Whole network</string>
+  <!-- Live overlay: bounded failure reasons. Never raw exception text. -->
+  <string name="transit_live_no_board">Select a stop before requesting live data.</string>
+  <string name="transit_live_reason_offline">no connection</string>
+  <string name="transit_live_reason_timeout">timed out</string>
+  <string name="transit_live_reason_bad_feed">unreadable feed</string>
+  <string name="transit_live_reason_refused">refused by relay</string>
 </resources>
