@@ -566,7 +566,7 @@ public class TimetableActivity extends AppCompatActivity
     {
       mItems.clear();
       mItems.addAll(items);
-      notifyDataSetChanged(); // bounded lists (<= 50), fine for pilot
+      notifyDataSetChanged(); // bounded lists (<= BOARD_LIMIT), fine for pilot
     }
 
     @Override public int getItemCount() { return mItems.size(); }

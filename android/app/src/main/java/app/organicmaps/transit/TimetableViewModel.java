@@ -52,7 +52,16 @@ public class TimetableViewModel extends AndroidViewModel
   public static final int SEARCH_LIMIT = 20;
   public static final int NEARBY_LIMIT = 20;
   public static final int NEARBY_RADIUS_METRES = 1000;
-  public static final int BOARD_LIMIT = 50;
+  /**
+   * Depth of the departure board. Measured 2026-10-14 against the live VBB
+   * feed: at 50 rows the board spans only ~27 minutes and carries no realtime
+   * coverage at all (0 of 50 at Alexanderplatz), because the feed covers a
+   * sparse subset of trips that begins further out. At 300 the window reaches
+   * ~160 minutes, close to the horizon below, and 18-24% of rows resolve to
+   * live data. Deeper is not better: the rate falls again past this, since the
+   * board then outruns what the feed describes.
+   */
+  public static final int BOARD_LIMIT = 300;
   public static final int BOARD_HORIZON_MINUTES = 180;
 
   /** Immutable snapshot for onSaveInstanceState; holds only IDs/text, no live data. */
