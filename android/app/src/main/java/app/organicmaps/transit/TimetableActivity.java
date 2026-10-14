@@ -614,8 +614,11 @@ public class TimetableActivity extends AppCompatActivity
       {
         Departure d = (Departure) mItems.get(position);
         tv.setText(departureLine(d));
-        tv.setContentDescription(getString(R.string.transit_departure_row, d.line, d.destination,
-            TimetableViewModel.formatAgencyTime(d)));
+        // A contentDescription REPLACES the visible text for a screen reader,
+        // so it has to carry the live state too. Omitting it here meant a
+        // TalkBack user never heard whether a departure was live, delayed or
+        // cancelled — the live layer was silent to them.
+        tv.setContentDescription(departureDescription(d));
       }
       else
       {
@@ -628,6 +631,56 @@ public class TimetableActivity extends AppCompatActivity
           mModel.selectStop(st);
         });
       }
+    }
+
+    /**
+     * Spoken form of a departure row.
+     *
+     * Mirrors {@link #departureLine} but in words a screen reader can read
+     * naturally: the visible line separates fields with middle dots, which a
+     * screen reader announces literally as punctuation.
+     */
+    private String departureDescription(Departure d)
+    {
+      StringBuilder sb = new StringBuilder()
+          .append(getString(R.string.transit_departure_row, d.line, d.destination,
+                            TimetableViewModel.formatAgencyTime(d)));
+      if (d.platform != null && !d.platform.isEmpty())
+        sb.append(", ").append(getString(R.string.transit_platform, d.platform));
+      if (d.requiresReservation())
+        sb.append(", ").append(getString(R.string.transit_reservation_required));
+      if (d.timepoint != null && d.timepoint == 0)
+        sb.append(", ").append(getString(R.string.transit_approximate_time));
+      sb.append(", ").append(liveDescription(d));
+      return sb.toString();
+    }
+
+    /** Spoken realtime state; always says something, including when absent. */
+    private String liveDescription(Departure d)
+    {
+      RealtimeMerger.DepartureRow live =
+          d.tripSourceId == null ? null : mLiveRows.get(d.tripSourceId);
+      if (live == null || !live.hasLiveData())
+        return getString(R.string.transit_live_spoken_scheduled);
+      final String base;
+      switch (live.state)
+      {
+        case CANCELED:
+          base = getString(R.string.transit_live_spoken_canceled);
+          break;
+        case DELAYED:
+        {
+          long delaySec = live.delaySeconds != null ? live.delaySeconds
+              : (live.liveDeparture != null
+                  ? live.liveDeparture - live.scheduledDeparture : 0L);
+          base = getString(R.string.transit_live_spoken_delayed, (int) delaySec);
+          break;
+        }
+        default:
+          base = getString(R.string.transit_live_spoken_live);
+          break;
+      }
+      return live.stale ? base + ", " + getString(R.string.transit_live_spoken_stale) : base;
     }
 
     private String departureLine(Departure d)

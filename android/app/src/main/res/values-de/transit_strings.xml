@@ -40,6 +40,13 @@
   <string name="transit_live_delayed">live · +%1$ds</string>
   <string name="transit_live_canceled">FAHRT FÄLLT AUS</string>
   <string name="transit_live_stale">veraltet</string>
+  <!-- Gesprochene Formen für Bildschirmleser; die sichtbaren Formen
+       verwenden Mittelpunkte, die wörtlich vorgelesen werden. -->
+  <string name="transit_live_spoken_live">live, pünktlich</string>
+  <string name="transit_live_spoken_delayed">live, %1$d Sekunden verspätet</string>
+  <string name="transit_live_spoken_canceled">fällt aus, diese Fahrt verkehrt nicht</string>
+  <string name="transit_live_spoken_scheduled">nur Fahrplan, keine Echtzeitdaten für diese Fahrt</string>
+  <string name="transit_live_spoken_stale">Echtzeitdaten sind veraltet</string>
   <string name="transit_live_coverage">Echtzeitdaten für %1$d von %2$d Zeilen</string>
   <string name="transit_live_off">Echtzeit-Updates aus</string>
   <string name="transit_live_error">Echtzeit-Updates nicht verfügbar: %1$s</string>

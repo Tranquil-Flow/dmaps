@@ -40,6 +40,13 @@
   <string name="transit_live_delayed">live · +%1$ds</string>
   <string name="transit_live_canceled">CANCELLED</string>
   <string name="transit_live_stale">stale</string>
+  <!-- Spoken forms for screen readers; the visible forms use middle dots
+       that a screen reader announces literally. -->
+  <string name="transit_live_spoken_live">live, on time</string>
+  <string name="transit_live_spoken_delayed">live, delayed by %1$d seconds</string>
+  <string name="transit_live_spoken_canceled">cancelled, this departure will not run</string>
+  <string name="transit_live_spoken_scheduled">scheduled only, no live data for this departure</string>
+  <string name="transit_live_spoken_stale">live data is stale</string>
   <string name="transit_live_coverage">Live data covers %1$d of %2$d rows</string>
   <string name="transit_live_off">Live updates off</string>
   <string name="transit_live_error">Live updates unavailable: %1$s</string>
