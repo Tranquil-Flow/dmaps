@@ -27,6 +27,10 @@
       android:layout_height="wrap_content"
       tools:layout="@layout/place_page_wikipedia_fragment" />
 
+    <!-- Offline timetable entry point; hidden unless the selection is a
+         boardable point and a pack is present (see PlacePageView). -->
+    <include layout="@layout/place_page_departures"/>
+
     <include layout="@layout/place_page_placename"/>
 
     <include layout="@layout/place_page_population"/>

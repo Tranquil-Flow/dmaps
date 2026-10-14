@@ -2,6 +2,9 @@
 <resources>
   <!-- Offline timetable pilot (CoMaps Germany / VBB). Language: English. -->
   <string name="transit_title">Timetable</string>
+  <!-- Place-page entry point. -->
+  <string name="transit_place_departures">Departures</string>
+  <string name="transit_place_departures_hint">Show scheduled departures for this place</string>
   <string name="transit_settings_summary">Import an offline timetable pack and view scheduled departures without a network connection.</string>
   <string name="transit_import_pack">Import timetable pack</string>
   <string name="transit_remove_pack">Remove pack</string>

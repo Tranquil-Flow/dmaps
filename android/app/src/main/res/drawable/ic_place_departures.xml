@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Departure-board marker: a scheduled time on a clock face.
+     CoMaps ships no transit iconography (its transit stack is desktop-only),
+     so this is drawn here rather than reused from an unrelated glyph. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="24"
+  android:viewportHeight="24">
+  <path
+    android:fillColor="#FFFFFFFF"
+    android:pathData="M12,2A10,10 0 1,0 12,22A10,10 0 1,0 12,2Z" />
+  <path
+    android:fillColor="#FF000000"
+    android:pathData="M12,4a8,8 0 1,0 0,16a8,8 0 1,0 0,-16Z" />
+  <path
+    android:fillColor="#FFFFFFFF"
+    android:pathData="M12,6a6,6 0 1,0 0,12a6,6 0 1,0 0,-12Z" />
+  <path
+    android:strokeColor="#FF000000"
+    android:strokeWidth="1.6"
+    android:strokeLineCap="round"
+    android:pathData="M12,8.5L12,12.2L14.9,14.1" />
+  <path
+    android:fillColor="#FF000000"
+    android:pathData="M11.35,1.4h1.3v2.2h-1.3Z" />
+</vector>

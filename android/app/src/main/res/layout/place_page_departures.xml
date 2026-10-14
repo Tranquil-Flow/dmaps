@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Place-page row that opens the offline timetable for the tapped location.
+     Entirely opt-in: tapping is the only thing that starts a network request,
+     and the board works without one. -->
+<LinearLayout
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  android:id="@+id/ll__place_departures"
+  style="@style/PlacePageItemFrame"
+  android:clickable="true"
+  android:focusable="true"
+  tools:background="#4000FFFF"
+  tools:visibility="visible">
+
+  <com.google.android.material.imageview.ShapeableImageView
+    android:id="@+id/iv__place_departures"
+    style="@style/PlacePageMetadataIcon"
+    android:importantForAccessibility="no"
+    app:srcCompat="@drawable/ic_place_departures" />
+
+  <com.google.android.material.textview.MaterialTextView
+    android:id="@+id/tv__place_departures"
+    android:textAlignment="viewStart"
+    style="@style/PlacePageMetadataText"
+    tools:text="Departures" />
+</LinearLayout>

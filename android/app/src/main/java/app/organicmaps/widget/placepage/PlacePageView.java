@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
+import android.widget.TextView;
 import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -40,6 +41,7 @@ import com.google.android.material.textview.MaterialTextView;
 
 import app.organicmaps.MwmActivity;
 import app.organicmaps.MwmApplication;
+import app.organicmaps.transit.TimetableActivity;
 import app.organicmaps.R;
 import app.organicmaps.bookmarks.BookmarksSharingHelper;
 import app.organicmaps.bookmarks.ChooseBookmarkCategoryFragment;
@@ -218,6 +220,7 @@ public class PlacePageView extends Fragment
     }
   };
   private PlacePageViewListener mPlacePageViewListener;
+  @Nullable private View mDeparturesRow;
 
   private PlacePageViewModel mViewModel;
   private MapObject mMapObject;
@@ -264,6 +267,20 @@ public class PlacePageView extends Fragment
 
     mFrame = view;
     mFrame.setOnClickListener((v) -> mPlacePageViewListener.onPlacePageRequestToggleState());
+
+    mDeparturesRow = mFrame.findViewById(R.id.ll__place_departures);
+    final TextView tvDepartures = mFrame.findViewById(R.id.tv__place_departures);
+    if (tvDepartures != null)
+      tvDepartures.setText(R.string.transit_place_departures);
+    if (mDeparturesRow != null)
+    {
+      // The row is an action, so say so for a screen reader rather than
+      // letting it read as inert text.
+      mDeparturesRow.setContentDescription(getString(R.string.transit_place_departures_hint));
+      // A lambda, not a method reference: onClick hands over the clicked view,
+      // and openTimetable() deliberately takes nothing.
+      mDeparturesRow.setOnClickListener((v) -> openTimetable());
+    }
     mPreview = mFrame.findViewById(R.id.pp__preview);
 
     mFrame.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -437,6 +454,7 @@ public class PlacePageView extends Fragment
   {
     refreshPreview();
     refreshDetails();
+    updateTimetableView();
     final Location loc = MwmApplication.from(requireContext()).getLocationHelper().getSavedLocation();
     if (mMapObject.isMyPosition())
       refreshMyPosition(loc);
@@ -501,6 +519,41 @@ public class PlacePageView extends Fragment
   {
     updateViewFragment(PlacePageTrackFragment.class, TRACK_FRAGMENT_TAG, R.id.place_page_track_fragment,
                        mMapObject.isTrack());
+  }
+
+  /**
+   * Shows the timetable row only for a boardable point. Tracks, bookmarks and
+   * "my position" are not places a departure board can describe, so offering
+   * one there would be a confident-looking affordance with nothing behind it.
+   */
+  private void updateTimetableView()
+  {
+    if (mDeparturesRow == null)
+      return;
+    // A normal point is everything that is not my-position, a bookmark or a
+    // track; MapObject exposes only those three predicates.
+    boolean boardable = !mMapObject.isMyPosition() && !mMapObject.isTrack()
+                        && !mMapObject.isBookmark();
+    UiUtils.hideIf(!boardable, mDeparturesRow);
+  }
+
+  /**
+   * Opens the offline timetable for the selected place.
+   *
+   * Only coordinates and a label cross the boundary; the timetable resolves
+   * the nearest pack stop locally. Nothing here queries the pack, so the
+   * place page never blocks on disk I/O and a missing pack is reported by
+   * the timetable itself, which already knows how to offer an import.
+   */
+  private void openTimetable()
+  {
+    if (mMapObject == null)
+      return;
+    String name = mMapObject.getTitle();
+    if (TextUtils.isEmpty(name))
+      name = mMapObject.getSecondaryTitle();
+    startActivity(TimetableActivity.createIntent(requireContext(),
+        mMapObject.getLat(), mMapObject.getLon(), name));
   }
 
   private void updateAddReviewView()

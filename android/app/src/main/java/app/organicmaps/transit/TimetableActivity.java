@@ -57,6 +57,26 @@ public class TimetableActivity extends AppCompatActivity
   private static final String EXTRA_LON = "transit.extra.lon";
   private static final String EXTRA_NAME = "transit.extra.name";
 
+  /**
+   * Launches the timetable for a place.
+   *
+   * Only coordinates and a label are passed. The stop itself is resolved
+   * locally against the pack on arrival, so a caller never needs to know
+   * whether a pack exists or which stop id it uses.
+   */
+  @androidx.annotation.NonNull
+  public static android.content.Intent createIntent(@NonNull Context context,
+                                                    double lat, double lon,
+                                                    @Nullable String name)
+  {
+    android.content.Intent i = new android.content.Intent(context, TimetableActivity.class);
+    i.putExtra(EXTRA_LAT, lat);
+    i.putExtra(EXTRA_LON, lon);
+    if (name != null)
+      i.putExtra(EXTRA_NAME, name);
+    return i;
+  }
+
   /** Minimal linear-layout DSL so the UI stays programmatic but readable. */
   private static LinearLayout vlinear(Context c)
   {

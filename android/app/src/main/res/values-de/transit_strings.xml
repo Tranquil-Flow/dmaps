@@ -2,6 +2,9 @@
 <resources>
   <!-- Offline-Timetable-Pilot (CoMaps Deutschland / VBB). Sprache: Deutsch. -->
   <string name="transit_title">Fahrplan</string>
+  <!-- Eintrag in der Ortsseite. -->
+  <string name="transit_place_departures">Abfahrten</string>
+  <string name="transit_place_departures_hint">Geplante Abfahrten für diesen Ort anzeigen</string>
   <string name="transit_settings_summary">Offline-Fahrplanpaket importieren und geplante Abfahrten ohne Netzwerkverbindung anzeigen.</string>
   <string name="transit_import_pack">Fahrplanpaket importieren</string>
   <string name="transit_remove_pack">Paket entfernen</string>
