@@ -453,6 +453,12 @@ public final class TimetableRepository implements AutoCloseable
     }
   }
 
+  /** Offsets come from elapsed service time, and import validates the pack's maximum departure offset against its rows. */
+  static boolean serviceDayCanDepart(long firstOffset, long lastOffset, long maxDepartureOffset)
+  {
+    return lastOffset >= firstOffset && lastOffset >= 0 && firstOffset <= maxDepartureOffset;
+  }
+
   private List<Departure> departuresLocked(long stopId, Instant now, int limit,
                                           int horizonMinutes) throws IOException
   {
@@ -513,14 +519,14 @@ public final class TimetableRepository implements AutoCloseable
         int dateKey = d.getYear() * 10000 + d.getMonthValue() * 100 + d.getDayOfMonth();
         long lo = Math.max(0, Duration.between(origin, now).getSeconds());
         long hi = Duration.between(origin, windowEnd).getSeconds();
-        if (hi < lo)
+        if (!serviceDayCanDepart(lo, hi, maxDep))
           continue;
         Cursor c = mDb.rawQuery(
             "SELECT t.source_id, r.short_name," +
             " COALESCE(NULLIF(st.stop_headsign,''), t.headsign)," +
             " sp.name, sp.platform, r.route_type, st.pickup_type, st.timepoint," +
             " st.departure_seconds, sd.service_date, st.stop_id, sp.source_id, st.stop_sequence," +
-            " (SELECT COUNT(*) FROM stop_times visits WHERE visits.trip_id=st.trip_id AND visits.stop_id=st.stop_id)" +
+            " (SELECT COUNT(*) FROM stop_times visits WHERE visits.trip_id=st.trip_id AND +visits.stop_id=st.stop_id)" +
             " FROM stop_times st" +
             " JOIN trips t ON t.id = st.trip_id" +
             " JOIN routes r ON r.id = t.route_id" +
