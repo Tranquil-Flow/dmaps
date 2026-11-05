@@ -70,6 +70,10 @@ final class RoutingBottomMenuController implements View.OnClickListener
   @NonNull
   private final ShapeableImageView mAltitudeChart;
   @NonNull
+  private final RouteElevationChartController mRouteChart;
+  @NonNull
+  private final View mRouteAltitudeSlot;
+  @NonNull
   private final MaterialTextView mTime;
   @NonNull
   private final MaterialTextView mAltitudeDifference;
@@ -134,6 +138,9 @@ final class RoutingBottomMenuController implements View.OnClickListener
     mError = error;
     mStart = start;
     mAltitudeChart = altitudeChart;
+    mRouteAltitudeSlot = altitudeChartFrame.findViewById(R.id.route_altitude_slot);
+    UiUtils.hide(mRouteAltitudeSlot);
+    mRouteChart = new RouteElevationChartController(altitudeChartFrame.findViewById(R.id.route_altitude_chart));
     mTime = time;
     mAltitudeDifference = altitudeDifference;
     mTimeVehicle = timeVehicle;
@@ -144,6 +151,7 @@ final class RoutingBottomMenuController implements View.OnClickListener
     mActionButton.setOnClickListener(this);
     View actionSearchButton = actionFrame.findViewById(R.id.btn__search_point);
     actionSearchButton.setOnClickListener(this);
+    actionFrame.findViewById(R.id.btn__manage_partial_route).setOnClickListener(this);
     mActionIcon = mActionButton.findViewById(R.id.iv__icon);
     UiUtils.hide(mAltitudeChartFrame, mActionFrame);
     mListener = listener;
@@ -161,13 +169,21 @@ final class RoutingBottomMenuController implements View.OnClickListener
 
     MaterialButton saveButton = altitudeChartFrame.findViewById(R.id.btn__save);
     saveButton.setOnClickListener(this);
+    // Fragment removal / rotation drops all chart-local data as well as the hidden phone path.
+    altitudeChartFrame.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener()
+    {
+      @Override public void onViewAttachedToWindow(View view) {}
+      @Override public void onViewDetachedFromWindow(View view) { clearRouteAltitudeChart(); }
+    });
   }
 
   void showAltitudeChartAndRoutingDetails()
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mError, mActionFrame, mAltitudeChart, mTimeElevationLine, mTransitFrame);
 
-    if (!RoutingController.get().isVehicleRouterType() && !RoutingController.get().isRulerRouterType())
+    if (RoutingController.get().isBuilt() && !RoutingController.get().isVehicleRouterType()
+        && !RoutingController.get().isRulerRouterType() && !RoutingController.get().isTransitType())
       showRouteAltitudeChart();
     showRoutingDetails();
     UiUtils.show(mAltitudeChartFrame);
@@ -179,12 +195,14 @@ final class RoutingBottomMenuController implements View.OnClickListener
 
   void hideAltitudeChartAndRoutingDetails()
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mAltitudeChartFrame, mTransitFrame);
   }
 
   @SuppressLint("SetTextI18n")
   void showTransitInfo(@NonNull TransitRouteInfo info)
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mError, mAltitudeChartFrame, mActionFrame);
     showStartButton(false);
     UiUtils.show(mTransitFrame);
@@ -211,6 +229,7 @@ final class RoutingBottomMenuController implements View.OnClickListener
   @SuppressLint("SetTextI18n")
   void showRulerInfo(@NonNull RouteMarkData[] points, Distance totalLength)
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mError, mAltitudeChartFrame, mActionFrame, mAltitudeChartFrame);
     showStartButton(false);
     UiUtils.show(mTransitFrame);
@@ -259,12 +278,20 @@ final class RoutingBottomMenuController implements View.OnClickListener
     return transitSteps;
   }
 
+  private void updatePartialRouteManagement()
+  {
+    UiUtils.showIf(RoutingController.get().canCompleteMissingEndpoint(Framework.nativeGetRoutePoints()),
+                   mActionFrame.findViewById(R.id.btn__manage_partial_route));
+  }
+
   void showAddStartFrame()
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mError, mTransitFrame);
     UiUtils.show(mActionFrame);
     mActionMessage.setText(R.string.routing_add_start_point);
     mActionMessage.setTag(RouteMarkType.Start);
+    updatePartialRouteManagement();
     if (MwmApplication.from(mContext).getLocationHelper().getMyPosition() != null)
     {
       UiUtils.show(mActionButton);
@@ -281,10 +308,12 @@ final class RoutingBottomMenuController implements View.OnClickListener
 
   void showAddFinishFrame()
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mError, mTransitFrame);
     UiUtils.show(mActionFrame);
     mActionMessage.setText(R.string.routing_add_finish_point);
     mActionMessage.setTag(RouteMarkType.Finish);
+    updatePartialRouteManagement();
     UiUtils.hide(mActionButton);
   }
 
@@ -312,6 +341,7 @@ final class RoutingBottomMenuController implements View.OnClickListener
 
   private void showError(@NonNull String message)
   {
+    clearRouteAltitudeChart();
     UiUtils.hide(mAltitudeChartFrame, mActionFrame, mTransitFrame);
     mError.setText(message);
     mError.setVisibility(View.VISIBLE);
@@ -341,6 +371,14 @@ final class RoutingBottomMenuController implements View.OnClickListener
       showError(error);
   }
 
+  void clearRouteAltitudeChart()
+  {
+    mRouteChart.clear();
+    mAltitudeChart.setImageDrawable(null);
+    UiUtils.hide(mRouteAltitudeSlot, mAltitudeChart, mAltitudeDifference);
+    mAltitudeDifference.setText("");
+  }
+
   private void showRouteAltitudeChart()
   {
     if (RoutingController.get().isVehicleRouterType())
@@ -358,13 +396,15 @@ final class RoutingBottomMenuController implements View.OnClickListener
     if (bm != null)
     {
       mAltitudeChart.setImageBitmap(bm);
-      UiUtils.show(mAltitudeChart);
+      // The existing native bitmap call remains the sole source of displayed statistics.
+      // If its optional profile is absent/unsupported, retain this exact bitmap.
+      UiUtils.showIf(!mRouteChart.show(limits.profile, limits.isMetricUnits), mAltitudeChart);
       final String unit = limits.isMetricUnits
                             ? mAltitudeDifference.getResources().getString(app.organicmaps.sdk.R.string.m)
                             : mAltitudeDifference.getResources().getString(app.organicmaps.sdk.R.string.ft);
       mAltitudeDifference.setText("↗ " + limits.totalAscentString + " " + unit + " ↘ " + limits.totalDescentString + " "
                                   + unit);
-      UiUtils.show(mAltitudeDifference);
+      UiUtils.show(mAltitudeDifference, mRouteAltitudeSlot);
     }
   }
 
@@ -476,12 +516,18 @@ final class RoutingBottomMenuController implements View.OnClickListener
       final RouteMarkType pointType = (RouteMarkType) mActionMessage.getTag();
       mListener.onSearchRoutePoint(pointType);
     }
+    else if (id == R.id.btn__manage_partial_route)
+    {
+      if (RoutingController.get().canCompleteMissingEndpoint(Framework.nativeGetRoutePoints()))
+        mListener.onManageRouteOpen();
+    }
     else if (id == R.id.btn__manage_route)
       mListener.onManageRouteOpen();
     else if (id == R.id.btn__directions_preview)
       mListener.onDirectionsPreviewOpen();
     else if (id == R.id.btn__save)
     {
+      clearRouteAltitudeChart();
       Framework.nativeSaveRoute();
       MaterialButton saveButton = (MaterialButton) v;
       saveButton.setEnabled(false);

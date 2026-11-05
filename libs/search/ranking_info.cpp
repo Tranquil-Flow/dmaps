@@ -353,7 +353,15 @@ double RankingInfo::GetLinearModelRank(bool viewportMode /* = false */) const
   double result = 0.0;
   if (!m_categorialRequest)
   {
-    if (!viewportMode)
+    // A complete country-name query is global: its result must not depend on the viewport pivot.
+    // Keep spatial ranking for partial/contextual/category, alias and nearby matches. Use the raw
+    // name score and the entire country token range, not a POI's promoted name score.
+    auto const & countryTokens = m_tokenRanges[Model::TYPE_COUNTRY];
+    bool const completeCountryName =
+        m_type == Model::TYPE_COUNTRY && m_nameScore == NameScore::FULL_MATCH && m_allTokensUsed &&
+        m_errorsMade.IsValid() && m_numTokens > 0 && countryTokens.Begin() == 0 &&
+        countryTokens.End() == m_numTokens && !m_isAltOrOldName && !m_nearbyMatch && !m_pureCats && !m_falseCats;
+    if (!viewportMode && !completeCountryName)
       result += kDistanceToPivot * distanceToPivot;
 
     result += kRank * rank;

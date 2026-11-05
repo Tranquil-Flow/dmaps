@@ -24,3 +24,13 @@ target_link_libraries(${PROJECT_NAME}
     platform_tests_support
     storage
 )
+
+# Owned loopback only: invoke via run_storage_loopback.py, never the legacy
+# REQUIRE_SERVER fixture (it may kill other processes). Existing suite unchanged.
+omim_add_test(storage_loopback_tests storage_loopback_tests.cpp REQUIRE_QT)
+target_link_libraries(storage_loopback_tests PRIVATE
+  base coding geometry platform platform_tests_support storage)
+
+if(APPLE)
+  target_link_libraries(storage_loopback_tests PRIVATE "-framework CoreFoundation")
+endif()

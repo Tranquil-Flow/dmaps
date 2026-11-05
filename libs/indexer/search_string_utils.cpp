@@ -163,6 +163,13 @@ LevenshteinDFA BuildLevenshteinDFA(UniString const & s)
   return LevenshteinDFA(s, 1 /* prefixSize */, kAllowedMisprints, GetMaxErrorsForToken(s));
 }
 
+LevenshteinDFA::MatchResult MatchLevenshteinToken(UniString const & pattern, UniString const & input)
+{
+  ASSERT(!pattern.empty(), ());
+  return LevenshteinDFA::Match(pattern, input, 1 /* prefixSize */, kAllowedMisprints,
+                              GetMaxErrorsForToken(pattern));
+}
+
 LevenshteinDFA BuildLevenshteinDFA_Category(UniString const & s)
 {
   // https://github.com/organicmaps/organicmaps/issues/3655

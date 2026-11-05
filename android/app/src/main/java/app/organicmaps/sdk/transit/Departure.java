@@ -18,12 +18,35 @@ public final class Departure
   /** GTFS stop_id of the platform serving this departure; realtime join key. */
   public final String stopSourceId;
   public final String serviceDate; // ISO yyyy-MM-dd
+  public final Integer stopSequence;
+  /** Visits to this stop in the complete static trip; 0 means unknown, not unique. */
+  public final int stopVisitCount;
 
   public Departure(String tripSourceId, String line, String destination, String stopName,
                    String platform, int routeType, int pickupType, Integer timepoint,
                    Instant when, String timezone, long stopId, String stopSourceId,
                    String serviceDate)
   {
+    this(tripSourceId, line, destination, stopName, platform, routeType, pickupType, timepoint,
+        when, timezone, stopId, stopSourceId, serviceDate, null);
+  }
+
+  public Departure(String tripSourceId, String line, String destination, String stopName,
+                   String platform, int routeType, int pickupType, Integer timepoint,
+                   Instant when, String timezone, long stopId, String stopSourceId,
+                   String serviceDate, Integer stopSequence)
+  {
+    this(tripSourceId, line, destination, stopName, platform, routeType, pickupType, timepoint,
+        when, timezone, stopId, stopSourceId, serviceDate, stopSequence, 0);
+  }
+
+  public Departure(String tripSourceId, String line, String destination, String stopName,
+                   String platform, int routeType, int pickupType, Integer timepoint,
+                   Instant when, String timezone, long stopId, String stopSourceId,
+                   String serviceDate, Integer stopSequence, int stopVisitCount)
+  {
+    this.stopVisitCount = stopVisitCount;
+    this.stopSequence = stopSequence;
     this.tripSourceId = tripSourceId;
     this.line = line;
     this.destination = destination;

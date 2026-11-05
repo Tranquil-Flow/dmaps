@@ -1,0 +1,1886 @@
+{
+  "schema": "dmaps.disruption-matrix/1",
+  "about": "SYSTEM S6. Every state x disruption. contract: PRESERVE | RETIRE | NOT_APPLICABLE | UNDECIDED. status: EXERCISED_EXISTING/NEW/BOTH (a named, source-present test runs the cell) | DERIVED (follows from a cited exercised cell by shared code path; NOT counted as exercised) | NOT_APPLICABLE | GAP (meaningful, untested) | DECISION (contract undecided). Only EXERCISED_* count as covered. Coverage statuses map named host tests, NOT execution. build/tools/matrix_status.py combines them with hash-checked GREEN receipts; real process kill, ART IME and GPU are separate phone claims.",
+  "disruptions": [
+    {
+      "id": "recreate",
+      "covers": "configuration change"
+    },
+    {
+      "id": "process_death",
+      "covers": "OS or crash kills DMaps, then restore"
+    },
+    {
+      "id": "app_switch_ime",
+      "covers": "leave and return; keyboard re-commits text"
+    },
+    {
+      "id": "pack_gen",
+      "covers": "timetable import/replacement/removal while away or in flight"
+    },
+    {
+      "id": "map_gen",
+      "covers": "street-map update while away or in flight (walking only)"
+    },
+    {
+      "id": "clock",
+      "covers": "time passes departure, pack validity, preview lifetime"
+    },
+    {
+      "id": "cancel",
+      "covers": "in-flight search/plan/restore stopped"
+    }
+  ],
+  "new_test_classes": [
+    "app.organicmaps.transit.JourneyDisruptionMatrixTest",
+    "app.organicmaps.transit.JourneyWalkingDisruptionTest",
+    "app.organicmaps.transit.TimetableDisruptionMatrixTest",
+    "app.organicmaps.transit.TimetableSafetyLifecycleTest",
+    "app.organicmaps.transit.TimetableClockDisruptionTest"
+  ],
+  "catalogue_tests": [
+    "app.organicmaps.transit.JourneyDisruptionMatrixTest#catalogueIdsFollowTheViewModelThroughEveryReachableState",
+    "app.organicmaps.transit.TimetableDisruptionMatrixTest#catalogueIdsFollowTheTimetableViewModelThroughItsReachableStates"
+  ],
+  "cells": [
+    {
+      "state": "J0",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Nothing to keep; same refresh() as every resume. See J3 cell.",
+      "screen": "journey"
+    },
+    {
+      "state": "J0",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Already empty.",
+      "screen": "journey"
+    },
+    {
+      "state": "J0",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No endpoint to drop; typed text only.",
+      "screen": "journey"
+    },
+    {
+      "state": "J0",
+      "disruption": "pack_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No identity held; refresh() reads the new pack.",
+      "screen": "journey"
+    },
+    {
+      "state": "J0",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J0",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "journey"
+    },
+    {
+      "state": "J0",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight except the pack load, which invalidate() deliberately does not cancel (JourneyViewModelTest#typingDuringResumeLoadMustNotStrandSearchWithoutPackInfo).",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Endpoints live in model fields; same suspend()/refresh() path as J3, not separately driven.",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#processDeathRestoresNoSelectionNoResultAndNoTypedQueryFromJ1J3AndJ4"
+      ],
+      "note": "Ephemeral by design (no saved query history): fresh process starts at J0 with the neutral prompt.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same TextWatcher as J3 destination/origin; not separately driven.",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.JourneyViewModelTest#refreshCannotPublishPackBWithRetainedSelectionsFromPackA"
+      ],
+      "note": "Same reconcileSelections() branch as the J3 cell (related test listed); J1 alone not driven.",
+      "retire_to": "J0",
+      "message": "journey_choose|journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same checkVisible() validity branch as J3.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J1",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Cancel clears both endpoints; same invalidate() path as J3.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Endpoints live in model fields; same suspend()/refresh() path as J3, not separately driven.",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "No persisted state exists for any Journey state; same fresh-model path as J1/J3/J4.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same TextWatcher; not separately driven.",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Symmetric reconcileSelections() branch.",
+      "retire_to": "J0",
+      "message": "journey_choose|journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same checkVisible() validity branch as J3.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J1D",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Cancel clears both endpoints; same invalidate() path as J3.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Endpoints live in model fields; same suspend()/refresh() path as J3, not separately driven.",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "No persisted state exists for any Journey state; same fresh-model path as J1/J3/J4.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same TextWatcher; not separately driven.",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.JourneyViewModelTest#stationPlatformChoiceAfterPackReplacementMustNotReinterpretOldId"
+      ],
+      "note": "Old numeric platform id is never reinterpreted against the new pack.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same checkVisible() validity branch as J3.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J2",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Cancel clears both endpoints; same invalidate() path as J3.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#recreateKeepsBothPlatformsAndRetiresTheResultWithoutResurrectingIt"
+      ],
+      "note": "Both platforms and the rider's next Plan press survive; labels re-bound.",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#processDeathRestoresNoSelectionNoResultAndNoTypedQueryFromJ1J3AndJ4"
+      ],
+      "note": "Ephemeral by design (no saved query history): fresh process starts at J0 with the neutral prompt.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyQueryEditTest#keyboardRecommittingTheSameWordKeepsTheChosenPlatform",
+        "app.organicmaps.transit.JourneyQueryEditTest#realEditStillRetiresTheEndpoint",
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#appSwitchThenKeyboardRecommitKeepsBothPlatformsInEitherField"
+      ],
+      "note": "The 10-28 defect cell. Existing test re-commits without leaving the app; the new test adds the switch and the origin field.",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyViewModelTest#refreshCannotPublishPackBWithRetainedSelectionsFromPackA",
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#planOnAReplacedPackRetiresTheEndpointsInsteadOfPlanningOnTheNewPack"
+      ],
+      "note": "refresh() drops A endpoints silently (journey_choose); Plan on A endpoints with pack B fails closed with journey_changed.",
+      "retire_to": "J0",
+      "message": "journey_choose|journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#packValidityEndRetiresPlatformsWhenNoResultWasEverPlanned"
+      ],
+      "note": "Pack validity end retires kept platforms even if no result was planned.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J3",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#cancelButtonWhilePlanIsInFlightLeavesAnEmptyConsistentScreen",
+        "app.organicmaps.transit.JourneyViewModelTest#completedWorkerCannotPublishAfterEditBeforeMainCallback"
+      ],
+      "note": "Plan in flight + Cancel: nothing publishes, endpoints cleared, controls usable.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#recreateRetiresCandidateListAndUnselectedQuery"
+      ],
+      "note": "Recreation retires candidates and unselected query; explicit selected endpoints follow their existing contract.",
+      "retire_to": "J0|J1|J1D|J2|J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "No persisted state exists for any Journey state; same fresh-model path as J1/J3/J4.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#keyboardRecommitKeepsTheShownResultAndTheShownCandidateList"
+      ],
+      "note": "Re-commit alone keeps the list. With a real pause the list is retired (see recreate/JC GAP).",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.JourneyViewModelTest#removalAfterSearchCannotReinterpretHitAndCannotRetainReadyData"
+      ],
+      "note": "Candidate list of pack A cannot be selected after the pack changed.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same validity branch.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "JC",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#cancelButtonWhileSearchIsInFlightPublishesNoCandidates",
+        "app.organicmaps.transit.JourneyViewModelTest#supersededQueuedSearchCannotPublishAfterInputEdit"
+      ],
+      "note": "Search in flight + Cancel/edit: no candidates published.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#recreateKeepsBothPlatformsAndRetiresTheResultWithoutResurrectingIt"
+      ],
+      "note": "Result retired at pause, never resurrected; endpoints kept.",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#processDeathRestoresNoSelectionNoResultAndNoTypedQueryFromJ1J3AndJ4"
+      ],
+      "note": "Ephemeral by design (no saved query history): fresh process starts at J0 with the neutral prompt.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "app_switch_ime",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyScreenTest#actualScreenRendersPlannedLegsAndRetiresThemOnEditAndResume",
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#keyboardRecommitKeepsTheShownResultAndTheShownCandidateList"
+      ],
+      "note": "Pause retires the plan to J3 (existing); a re-commit without pause keeps it (new).",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#replacedPackWhileAResultIsShownRetiresResultAndPlatformsWithTheChangedMessage"
+      ],
+      "note": "Visible check detects the generation change: result and endpoints retired, changed message on screen.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyViewModelTest#departedPlanRetiresAtItsFirstDepartureButKeepsEndpointsForReplanning",
+        "app.organicmaps.transit.JourneyViewModelTest#packExpiryStillOutranksDepartedPlan",
+        "app.organicmaps.transit.JourneyViewModelTest#visibleExpiryRetiresResultWithoutWaitingForAnotherWorkerRevision",
+        "app.organicmaps.transit.JourneyViewModelTest#expiryRetiresDisplayEvenWhenAuthorityRefreshIsAlreadyQueued",
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#departedPlanIsReplacedOnScreenByTheDepartedMessageAndPlatformsStay"
+      ],
+      "note": "Departure passes: result retired to JD, endpoints kept (existing VM level, new on-screen level). Pack expiry outranks.",
+      "retire_to": "JD",
+      "message": "journey_departed",
+      "screen": "journey"
+    },
+    {
+      "state": "J4",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.JourneyViewModelTest#explicitEndpointsPlanActualScheduledLegAndEditingRetiresIt"
+      ],
+      "note": "Editing a field retires the shown result at once.",
+      "retire_to": "J1|J1D",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same suspend() path; walking snapshot release is the app_switch cell (JourneyWalkingLeaseTest).",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.JourneyWalkingCacheSweepTest#snapshotLeftByADeadProcessIsRemovedWhenTheJourneyScreenOpens",
+        "app.organicmaps.transit.JourneyWalkingCacheSweepTest#laterModelsInTheSameProcessNeverTouchALiveSnapshot",
+        "app.organicmaps.transit.JourneyWalkingCacheSweepTest#sweepDoesNotFollowSymlinksOutOfTheCache"
+      ],
+      "note": "State ephemeral; the ~106 MB private map copy of 10-28 defect 1 is swept by the first model of the next process.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "app_switch_ime",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.JourneyWalkingLeaseTest#replanningUsesOneSnapshotAndOrdinaryPauseReleasesIt",
+        "app.organicmaps.transit.JourneyWalkingDisruptionTest#pauseRetiresTheWalkingResultButKeepsTheEndpointsForAReplan"
+      ],
+      "note": "Ordinary pause releases the walking result; endpoints kept. New test asserts state only (parent changes snapshot lifecycle).",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same checkVisible() branch as J4 plus the map-gen cell.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "map_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.JourneyWalkingLeaseTest#changedMapRetiresOldSnapshotBeforeNextPlan"
+      ],
+      "note": "Changed map retires the walking result and endpoints (full discard), closes the old snapshot.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyWalkingDisruptionTest#walkingResultRetiresAtItsFirstDepartureAndKeepsTheEndpoints"
+      ],
+      "note": "Walking results retire at departure like scheduled ones.",
+      "retire_to": "JD",
+      "message": "journey_departed",
+      "screen": "journey"
+    },
+    {
+      "state": "J5",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyWalkingDisruptionTest#cancelWhileTheWalkingPlanIsQueuedLeavesNoResultAndNoEndpoints"
+      ],
+      "note": "Walking plan in flight + Cancel: nothing publishes. Native cancellation of a RUNNING native query is not host-testable here.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J6",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "PHONE_PENDING",
+      "tests": [],
+      "note": "Actual MwmActivity recreation is not exercised by the session/controller tests. Phone must prove safe preview retirement and the in-process endpoint return; no stale line may resurrect.",
+      "screen": "journey",
+      "retire_to": "J7|J8"
+    },
+    {
+      "state": "J6",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#expiredUnclaimedAndSupersededCapabilitiesAreNotReplayable",
+        "app.organicmaps.transit.WalkingMapPreviewHostTest#refusedPreviewKeepsASeparateReturnPathWithoutCancellingExistingNavigation"
+      ],
+      "note": "Capability tokens are process memory; a stale intent token is refused with its own Back path. Host-mock, not a real kill. Mapping downgraded: these host callbacks/token tests do not execute this actual disruption; named evidence is related, not a full cell pass.",
+      "retire_to": "J0",
+      "message": "journey_return_reselect",
+      "screen": "journey"
+    },
+    {
+      "state": "J6",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "PHONE_PENDING",
+      "tests": [],
+      "note": "Actual map-side app-switch/return is not proven by delayed-return or controller-only tests. Phone pending; line still obeys its existing deadline and source checks.",
+      "screen": "journey"
+    },
+    {
+      "state": "J6",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#sourceInvalidationAfterPresentationRemovesLine"
+      ],
+      "note": "Preview line removed when the source (pack or map) is invalidated. Mapping downgraded: these host callbacks/token tests do not execute this actual disruption; named evidence is related, not a full cell pass.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J6",
+      "disruption": "map_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#sourceInvalidationAfterPresentationRemovesLine"
+      ],
+      "note": "Shared source-invalidation path. Mapping downgraded: these host callbacks/token tests do not execute this actual disruption; named evidence is related, not a full cell pass.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J6",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapReturnLifetimeTest#backAfterPreviewExpiryStillReturnsBothPlatformsOnce",
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#closeOrTimeoutBeforeCallbackCannotResurrect",
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#noPresentationUntilCurrencyReturnsAndCloseIsScopedIdempotent"
+      ],
+      "note": "5-minute preview lifetime ends the line only.",
+      "retire_to": "J7",
+      "screen": "journey"
+    },
+    {
+      "state": "J6",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#closeOrTimeoutBeforeCallbackCannotResurrect",
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#navigationAdmissionAndLateNavigationDoNotPresent"
+      ],
+      "note": "Close before callback cannot resurrect the preview.",
+      "retire_to": "J7",
+      "screen": "journey"
+    },
+    {
+      "state": "J7",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "PHONE_PENDING",
+      "tests": [],
+      "note": "Actual MwmActivity recreation is not exercised by the session/controller tests. Phone must prove safe preview retirement and the in-process endpoint return; no stale line may resurrect.",
+      "screen": "journey",
+      "retire_to": "J7|J8"
+    },
+    {
+      "state": "J7",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapPreviewControllerTest#expiredUnclaimedAndSupersededCapabilitiesAreNotReplayable"
+      ],
+      "note": "Same token table; see J8 NEW cell for the model side. Mapping downgraded: these host callbacks/token tests do not execute this actual disruption; named evidence is related, not a full cell pass.",
+      "retire_to": "J0",
+      "message": "journey_return_reselect",
+      "screen": "journey"
+    },
+    {
+      "state": "J7",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "PHONE_PENDING",
+      "tests": [],
+      "note": "Actual map-side app-switch/return is not proven by delayed-return or controller-only tests. Phone pending; line still obeys its existing deadline and source checks.",
+      "screen": "journey"
+    },
+    {
+      "state": "J7",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapReturnLifetimeTest#invalidatedSourceStillRefusesTheReturn"
+      ],
+      "note": "A changed timetable/map source exports no return. Mapping downgraded: these host callbacks/token tests do not execute this actual disruption; named evidence is related, not a full cell pass.",
+      "retire_to": "J0",
+      "message": "journey_return_reselect",
+      "screen": "journey"
+    },
+    {
+      "state": "J7",
+      "disruption": "map_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapReturnLifetimeTest#invalidatedSourceStillRefusesTheReturn"
+      ],
+      "note": "Shared source-invalidation path. Mapping downgraded: these host callbacks/token tests do not execute this actual disruption; named evidence is related, not a full cell pass.",
+      "retire_to": "J0",
+      "message": "journey_return_reselect",
+      "screen": "journey"
+    },
+    {
+      "state": "J7",
+      "disruption": "clock",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.WalkingMapReturnLifetimeTest#backAfterPreviewExpiryStillReturnsBothPlatformsOnce",
+        "app.organicmaps.transit.WalkingMapReturnLifetimeTest#delayedReturnStillRestoresPlatformsIntoTheJourneyModel"
+      ],
+      "note": "No timer on the endpoint return (owner decision 10-28 b).",
+      "screen": "journey"
+    },
+    {
+      "state": "J7",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Message replaced by journey_choose at the next resume; endpoints kept.",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#returnedStateIsOneShotAndAReplayOrAnUnknownTokenAsksToReselect"
+      ],
+      "note": "A token from a dead process is just an unknown token: reselect message, no endpoints.",
+      "retire_to": "J0",
+      "message": "journey_return_reselect",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "app_switch_ime",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Replan message replaced by journey_choose after pause; endpoints kept.",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#returnAfterPackReplacementAsksToReselectInsteadOfRestoringOldIdentities"
+      ],
+      "note": "Restore re-reads exact platform identities; a replaced pack yields the reselect message.",
+      "retire_to": "J0",
+      "message": "journey_return_reselect",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same checkVisible() validity branch; a replan-prompt J8 has no departure to pass.",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "J8",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Return restore uses the pack-load guard like refresh(): typing does not cancel it.",
+      "retire_to": "J0|J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Departed notice replaced by journey_choose; endpoints kept; no stale plan shown.",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same as J3.",
+      "retire_to": "J0",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "app_switch_ime",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Replaced by journey_choose; endpoints kept.",
+      "retire_to": "J3",
+      "message": "journey_choose",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same as J3 (endpoints are what is kept).",
+      "retire_to": "J0",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.JourneyDisruptionMatrixTest#packValidityEndRetiresTheKeptPlatformsEvenAfterTheDepartedState"
+      ],
+      "note": "Departed (endpoints kept) then pack validity end: endpoints retired.",
+      "retire_to": "JX",
+      "message": "journey_changed",
+      "screen": "journey"
+    },
+    {
+      "state": "JD",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight or terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "recreate",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state: recreate re-reads the repository (J0/JN) rather than preserving it.",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state; the next process re-reads the repository.",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "pack_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state; the next refresh() re-reads the repository. JB is covered by supersede tests (JourneyViewModelTest#supersededQueuedSearchCannotPublishAfterInputEdit).",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JX",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight or terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "recreate",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state: recreate re-reads the repository (J0/JN) rather than preserving it.",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state; the next process re-reads the repository.",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "pack_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state; the next refresh() re-reads the repository. JB is covered by supersede tests (JourneyViewModelTest#supersededQueuedSearchCannotPublishAfterInputEdit).",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JS",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight or terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "recreate",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state: recreate re-reads the repository (J0/JN) rather than preserving it.",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state; the next process re-reads the repository.",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "pack_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state; the next refresh() re-reads the repository. JB is covered by supersede tests (JourneyViewModelTest#supersededQueuedSearchCannotPublishAfterInputEdit).",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JB",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight or terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "recreate",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state: recreate re-reads the repository (J0/JN) rather than preserving it.",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state; the next process re-reads the repository.",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "pack_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state; the next refresh() re-reads the repository. JB is covered by supersede tests (JourneyViewModelTest#supersededQueuedSearchCannotPublishAfterInputEdit).",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JN",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight or terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "recreate",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state: recreate re-reads the repository (J0/JN) rather than preserving it.",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state; the next process re-reads the repository.",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient or terminal-retire state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "pack_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state; the next refresh() re-reads the repository. JB is covered by supersede tests (JourneyViewModelTest#supersededQueuedSearchCannotPublishAfterInputEdit).",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Holds no street-map input.",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Transient/terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "JF",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight or terminal state.",
+      "screen": "journey"
+    },
+    {
+      "state": "T0",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "TimetableUserJourneyTest initial NO_PACK; no state to keep.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T0",
+      "disruption": "process_death",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Already empty.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T0",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T0",
+      "disruption": "pack_gen",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.TimetableUserJourneyTest#officialRefusalThenExplicitUserImportSearchAndRemovalUseRealConsumers"
+      ],
+      "note": "Import turns T0 into T3 via the real importer.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T0",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T0",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T0",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#processDeathRoundTripRestoresSelectionAndQueryButRetiresCandidates"
+      ],
+      "note": "Selection re-validated against pack identity; query text kept. Exercised with a FRESH ViewModel from a parceled Bundle (stricter than a retained one); a retained-VM rotation is not separately driven.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "process_death",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#processDeathRoundTripRestoresSelectionAndQueryButRetiresCandidates",
+        "app.organicmaps.transit.TimetableRestoreStateTest#boundSavedSelectionReloadsActualIdentityAndFreshUntrustedMetadata",
+        "app.organicmaps.transit.TimetableRestoreStateTest#legacySavedSelectionWithoutPayloadIdentityIsDropped"
+      ],
+      "note": "Only stop id + payload hash + query survive; board and trust metadata re-read from the repository.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "app_switch_ime",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableClockDisruptionTest#appSwitchAndIdenticalKeyboardRecommitKeepTheRealScheduledBoard"
+      ],
+      "note": "Same-generation resume rechecks the pack, preserves an actual deterministic scheduled board and tolerates identical InputConnection composing text. Not physical IME.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_BOTH",
+      "tests": [
+        "app.organicmaps.transit.TimetableRestoreStateTest#differentPayloadCannotReinterpretSavedNumericId",
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#unchangedPackKeepsTheSelectionAndAReplacedPackRetiresItWithItsBoardAndCandidates"
+      ],
+      "note": "A changed payload never reuses a numeric stop id; board and candidates cleared on the next refreshPackState(). onResume does not call it (see DECISION note in README).",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableClockDisruptionTest#boardQueriesUseTheInjectedClockAndReturnActualFixtureDepartures",
+        "app.organicmaps.transit.TimetableClockDisruptionTest#clockPassingTheLastDepartureRetiresRowsButKeepsTheSelectedStop",
+        "app.organicmaps.transit.TimetableClockDisruptionTest#visibleBoardRetiresDepartedRowsFromTheActualAdapterOnItsClockTick"
+      ],
+      "note": "Injected-clock real SQLite boards. Foreground local tick removes departed rows; selected stop stays usable. No external polling.",
+      "retire_to": "T4|T6",
+      "screen": "timetable"
+    },
+    {
+      "state": "T1",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T2",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#processDeathRoundTripRestoresSelectionAndQueryButRetiresCandidates"
+      ],
+      "note": "Query text kept, candidate list retired to T3.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T2",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#processDeathRoundTripRestoresSelectionAndQueryButRetiresCandidates"
+      ],
+      "note": "Candidates are not persisted.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T2",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T2",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#unchangedPackKeepsTheSelectionAndAReplacedPackRetiresItWithItsBoardAndCandidates",
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#replacementWhileAwayIsRecheckedBeforeCandidatesCanBeUsed"
+      ],
+      "note": "Candidates cleared when the payload hash changes. Activity resume now revalidates before the old controls can be used.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T2",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T2",
+      "disruption": "clock",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#authorizationExpiryAlreadyRetiresCandidateRowsAtTheRealAdapterBoundary",
+        "app.organicmaps.transit.TimetableClockDisruptionTest#serviceWindowExpiryRetiresCandidatesAndBoardWithoutDroppingPackMetadata"
+      ],
+      "note": "Source-review candidate-leak hypothesis disproved: candidates share the retired adapter. Service-window expiry now also retires model rows, retains metadata, disables queries; no trust downgrade.",
+      "screen": "timetable",
+      "retire_to": "T6"
+    },
+    {
+      "state": "T2",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same refreshPackState(restored) path.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "process_death",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same path.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "pack_gen",
+      "contract": "PRESERVE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Re-read pack info.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T3",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "No results is not persisted; restore yields T3.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "Same path.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [],
+      "note": "refreshPackState() resets to READY.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T4",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#recreatedWorkingSearchRestoresQueryButNoAbandonedResults"
+      ],
+      "note": "Bundle round trip plus new ViewModel retires in-flight work and old results, preserving only allowed query context. Not a real process kill.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.TimetableImportStateTest#clearingSchedulesCloseAfterAdmittedWorkRatherThanBlockingMain"
+      ],
+      "note": "VM cleared with admitted work: repository closes behind the work.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.TimetableImportStateTest#committedFailureCannotSayPreviousPackWasKeptOrRetainOldRows",
+        "app.organicmaps.transit.TimetableImportStateTest#streamCloseFailureAfterRepositorySuccessIsCommittedNotRollback"
+      ],
+      "note": "In-flight import that committed: old rows dropped, error shown.",
+      "retire_to": "T6",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T5",
+      "disruption": "cancel",
+      "contract": "RETIRE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableDisruptionMatrixTest#cancelPendingResultsDiscardsTheInFlightSearchAndLeavesAUsableScreen"
+      ],
+      "note": "cancelPendingResults() bumps the generation: the late result is discarded and the screen is not WORKING. NOTE: TimetableActivity never calls cancelPendingResults() (grep), so no rider control reaches this cell today.",
+      "retire_to": "T3",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "recreate",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.TimetableImportStateTest#unavailableAuthorityKeepsRegisteredPackRemovableButDropsReadyMetadata",
+        "app.organicmaps.transit.TimetableImportStateTest#unreadableHistoryIsAnErrorNotNoPack"
+      ],
+      "note": "Error is recomputed from the repository, never cached as ready (related VM-level tests listed; no Activity recreate driven).",
+      "retire_to": "T6",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "process_death",
+      "contract": "RETIRE",
+      "status": "DERIVED",
+      "tests": [
+        "app.organicmaps.transit.TimetableImportStateTest#unavailableAuthorityKeepsRegisteredPackRemovableButDropsReadyMetadata"
+      ],
+      "note": "Recomputed from the repository on restore (related VM-level test).",
+      "retire_to": "T6",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "pack_gen",
+      "contract": "RETIRE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.TimetableImportStateTest#unavailableAuthorityKeepsRegisteredPackRemovableButDropsReadyMetadata"
+      ],
+      "note": "Authority unavailable: no ready metadata.",
+      "retire_to": "T6",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T6",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "recreate",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#failedImportDisclosureSurvivesAnActivityRecreation",
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#restoredFailureDoesNotAttachToAReplacementGeneration"
+      ],
+      "note": "Failed-import disclosure survives Bundle recreation only after revalidation of the same payload. A replacement never inherits the old warning.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "process_death",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_NEW",
+      "tests": [
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#failedImportDisclosureSurvivesAnActivityRecreation",
+        "app.organicmaps.transit.TimetableSafetyLifecycleTest#restoredFailureDoesNotAttachToAReplacementGeneration"
+      ],
+      "note": "Host saved-Bundle/new-ViewModel simulation only; same-generation failure context revalidated. Real process kill is phone acceptance.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "app_switch_ime",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "TimetableActivity has no TextWatcher on mQuery: an IME re-commit cannot change state.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "pack_gen",
+      "contract": "PRESERVE",
+      "status": "EXERCISED_EXISTING",
+      "tests": [
+        "app.organicmaps.transit.TimetableImportStateTest#ordinaryPrecommitFailureKeepsPreviousPackAndRetainsFailureDisclosure"
+      ],
+      "note": "Pre-commit failure keeps previous pack and the disclosure.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "map_gen",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Timetable screen has no street-map input.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "clock",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "No time-dependent content.",
+      "screen": "timetable"
+    },
+    {
+      "state": "T7",
+      "disruption": "cancel",
+      "contract": "NOT_APPLICABLE",
+      "status": "NOT_APPLICABLE",
+      "tests": [],
+      "note": "Nothing in flight.",
+      "screen": "timetable"
+    }
+  ]
+}

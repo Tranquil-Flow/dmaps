@@ -563,5 +563,11 @@
         android:name="androidx.car.app.minCarApiLevel"
         android:value="5"/>
 
+    <activity
+        android:name="app.organicmaps.transit.JourneyActivity"
+        android:exported="false"
+        android:label="@string/journey_title"
+        android:parentActivityName="app.organicmaps.transit.TimetableActivity"/>
+
   </application>
 </manifest>

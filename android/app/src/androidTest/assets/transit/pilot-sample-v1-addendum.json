@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "kind": "additive extension; original sixteen cases remain frozen and retained",
+  "extends_sample_sha256": "69fb3eecb0669a0e875cdd91b76706cb200cb1167dcfe8b18200a57fd5ddbaca",
+  "reason": "initial case source/window preconditions invalid for positive coverage, not a SQL mismatch: metro service outside noon window; original bus inactive on that date; platform pair is night bus N5",
+  "state": "source-reviewed; owner/field review pending",
+  "case_count": 4,
+  "cases": [
+    {
+      "case_id": "add-metro-evening",
+      "kind": "retained U5 platform in its evening service window",
+      "route_type": 400,
+      "line": "U5",
+      "stop": {
+        "id": 39897,
+        "source_id": "de:11000:900003201::1",
+        "name": "S+U Berlin Hauptbahnhof",
+        "platform": "1 (U5)",
+        "parent_id": 468,
+        "location_type": 0
+      },
+      "now": "2026-10-14T18:30:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "add-bus-active-day",
+      "kind": "bus 100 with source-admitted service on the fixed date/window",
+      "route_type": 700,
+      "line": "100",
+      "stop": {
+        "id": 492,
+        "source_id": "de:11000:900003252::1",
+        "name": "Schloss Bellevue (Berlin)",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "add-platform-night-1",
+      "kind": "retained same-name N5 platform in night service window",
+      "route_type": 700,
+      "line": "N5",
+      "stop": {
+        "id": 5537,
+        "source_id": "de:11000:900120009::3",
+        "name": "U Samariterstr. (Berlin)",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T00:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "add-platform-night-2",
+      "kind": "retained same-name N5 platform in night service window",
+      "route_type": 700,
+      "line": "N5",
+      "stop": {
+        "id": 5538,
+        "source_id": "de:11000:900120009::4",
+        "name": "U Samariterstr. (Berlin)",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T00:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    }
+  ]
+}

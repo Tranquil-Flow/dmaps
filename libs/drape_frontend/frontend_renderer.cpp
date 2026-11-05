@@ -453,6 +453,9 @@ void FrontendRenderer::AcceptMessage(ref_ptr<Message> message)
       m_myPositionController->NextMode(m_userEventStream.GetCurrentScreen());
       break;
     case ChangeMyPositionModeMessage::StopFollowing: m_myPositionController->StopLocationFollow(); break;
+    case ChangeMyPositionModeMessage::StopFollowingForPreview:
+      m_myPositionController->StopLocationFollowForPreview();
+      break;
     case ChangeMyPositionModeMessage::LoseLocation: m_myPositionController->LoseLocation(); break;
     default: ASSERT(false, ("Unknown change type:", static_cast<int>(msg->GetChangeType()))); break;
     }

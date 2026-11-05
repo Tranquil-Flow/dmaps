@@ -190,6 +190,32 @@ void LevenshteinDFA::State::Normalize()
 
 // LevenshteinDFA ----------------------------------------------------------------------------------
 // static
+LevenshteinDFA::MatchResult LevenshteinDFA::Match(UniString const & pattern, UniString const & input,
+                                                size_t prefixSize,
+                                                std::array<UniString, 11> const & prefixMisprints,
+                                                size_t maxErrors)
+{
+  CHECK_LESS_OR_EQUAL(prefixSize, pattern.size(), ());
+  // A ranking comparison consumes one input, so walk only its reachable NFA
+  // states instead of enumerating the DFA for every possible alphabet path.
+  // Reuse the same transitions, normalization and acceptance/error predicates.
+  LevenshteinDFA evaluator;
+  evaluator.m_size = pattern.size();
+  evaluator.m_maxErrors = maxErrors;
+  auto current = evaluator.MakeStart();
+  State next;
+  TransitionTable table(pattern, prefixMisprints, prefixSize);
+  for (auto c : input)
+  {
+    table.Move(current, c, next);
+    std::swap(current, next);
+    if (evaluator.IsRejecting(current))
+      break;
+  }
+  return {evaluator.IsAccepting(current), evaluator.IsRejecting(current),
+          evaluator.ErrorsMade(current), evaluator.PrefixErrorsMade(current)};
+}
+
 LevenshteinDFA::LevenshteinDFA(UniString const & s, size_t prefixSize,
                                std::array<UniString, 11> const & prefixMisprints, size_t maxErrors)
   : m_size(s.size())

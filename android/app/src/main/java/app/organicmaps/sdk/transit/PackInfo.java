@@ -4,13 +4,41 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
-/** Immutable pack metadata mirror of manifest.json. No provenance authentication claim. */
+/** Immutable metadata and derived trust of a verified generation; legacy constructors are untrusted. */
 public final class PackInfo
 {
   public final String publisher, attribution, license, sourceUrl, sourceSha256, databaseSha256;
   public final String createdUtc, validFrom, validUntil, timezone;
   public final long databaseBytes;
   public final int maxDepartureSeconds;
+  /** Data schema identity, not a journey-planner readiness or trust flag. */
+  public final int formatVersion;
+  /** Unknown in v1; never manufactured from its departure bound. */
+  public final Integer maxArrivalSeconds;
+
+  /** Trust is derived from the verified generation, never from publisher/provenance strings. */
+  public final boolean authenticated;
+  public final ImportMode importMode;
+  public final String signingKeyId;
+  public final long officialSequence;
+  public final Instant authorizationExpires;
+
+  PackInfo(PackEnvelope.Result verified)
+  {
+    java.util.Map<String, Object> m = verified.manifest;
+    publisher = (String) m.get("publisher"); attribution = (String) m.get("attribution");
+    license = (String) m.get("license"); sourceUrl = (String) m.get("source_url");
+    sourceSha256 = (String) m.get("source_sha256"); databaseSha256 = (String) m.get("database_sha256");
+    createdUtc = (String) m.get("created_utc"); validFrom = (String) m.get("valid_from");
+    validUntil = (String) m.get("valid_until"); timezone = (String) m.get("timezone");
+    databaseBytes = (Long) m.get("database_bytes"); maxDepartureSeconds = ((Long) m.get("max_departure_seconds")).intValue();
+    formatVersion = ((Long) m.get("format_version")).intValue();
+    maxArrivalSeconds = formatVersion == 2 ? ((Long) m.get("max_arrival_seconds")).intValue() : null;
+    authenticated = verified.authenticated; importMode = verified.mode;
+    signingKeyId = authenticated ? verified.keyId : null;
+    officialSequence = authenticated ? verified.sequence : 0;
+    authorizationExpires = authenticated ? verified.authorizationExpires : null;
+  }
 
   public PackInfo(String publisher, String attribution, String license, String sourceUrl,
                   String sourceSha256, String databaseSha256, String createdUtc,
@@ -29,6 +57,9 @@ public final class PackInfo
     this.timezone = timezone;
     this.databaseBytes = databaseBytes;
     this.maxDepartureSeconds = maxDepartureSeconds;
+    formatVersion = 1; maxArrivalSeconds = null;
+    authenticated = false; importMode = ImportMode.USER_UNTRUSTED;
+    signingKeyId = null; officialSequence = 0; authorizationExpires = null;
   }
 
   private Instant endOfLastValidDay()
@@ -38,7 +69,11 @@ public final class PackInfo
     // Valid through the end of the last valid service day, including its
     // after-midnight extension (up to the pack's max departure bound).
     Instant origin = GtfsTime.serviceOrigin(lastDay, tz);
-    return origin.plusSeconds((24L * 3600L) + Math.max(0, maxDepartureSeconds));
+    // maxDepartureSeconds is already measured from this service origin;
+    // adding a whole day again would advertise an expired pack as current.
+    int lastOffset = maxArrivalSeconds == null ? maxDepartureSeconds
+        : Math.max(maxDepartureSeconds, maxArrivalSeconds);
+    return origin.plusSeconds(Math.max(24L * 3600L, lastOffset));
   }
 
   private Instant startOfFirstValidDay()

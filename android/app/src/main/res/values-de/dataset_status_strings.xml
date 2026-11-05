@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- S1 DatasetStatus: gemeinsamer Kopftext und die eine hilfreiche Aktion, Fahrplan und Verbindung. -->
+  <string name="dataset_ready">Bereit: offizieller Fahrplan, gültig bis %1$s. Eine Karte ist installiert.</string>
+  <string name="dataset_ready_untrusted">Bereit, nicht vertrauenswürdig: selbst importierter Fahrplan, gültig bis %1$s. Eine Karte ist installiert.</string>
+  <string name="dataset_expiring_today">Der Fahrplan endet heute (%1$s).</string>
+  <plurals name="dataset_expiring_days">
+    <item quantity="one">Der Fahrplan endet in %1$d Tag (%2$s).</item>
+    <item quantity="other">Der Fahrplan endet in %1$d Tagen (%2$s).</item>
+  </plurals>
+  <string name="dataset_untrusted_short">Nicht vertrauenswürdiger Nutzerimport.</string>
+  <string name="dataset_expired">Der Fahrplan ist nach dem %1$s abgelaufen; die Fahrzeiten können veraltet sein.</string>
+  <string name="dataset_expired_authorization">Die Paketfreigabe ist abgelaufen oder nicht verfügbar. Fahrzeiten sind nicht verfügbar; das Paket wurde nicht auf „nicht vertrauenswürdig“ umgestellt.</string>
+  <string name="dataset_not_yet_valid">Der Fahrplan beginnt am %1$s; frühere Tage sind nicht abgedeckt.</string>
+  <string name="dataset_no_pack">Kein Fahrplanpaket installiert.</string>
+  <string name="dataset_pack_unavailable">Fahrplanpaket nicht verfügbar: Daten- oder Vertrauensprüfung konnte nicht abgeschlossen werden. Keine automatische Vertrauensherabstufung.</string>
+  <string name="dataset_incompatible">Das installierte Paket unterstützt nur Abfahrtstafeln. Die Verbindungsplanung braucht ein Paket im Format 2. Dein installiertes Paket wurde nicht verändert.</string>
+  <string name="dataset_map_missing">Keine Offline-Karte registriert. Geplante Abfahrten funktionieren weiter; Kartenfußwege brauchen eine installierte Karte.</string>
+  <string name="dataset_map_unknown">Die installierten Karten konnten nicht geprüft werden, daher sind Kartenfußwege nicht bestätigt. Geplante Abfahrten sind nicht betroffen.</string>
+  <string name="dataset_kept_previous">Import fehlgeschlagen. Das vorherige Paket wurde behalten: gültig bis %1$s.</string>
+  <string name="dataset_replace_failed_note">Der letzte Import ist fehlgeschlagen. Das vorherige Paket, falls vorhanden, wurde behalten.</string>
+  <string name="dataset_action_import">Als Nächstes: Fahrplanpaket importieren (Fahrplan, Fahrplanpaket importieren).</string>
+  <string name="dataset_action_import_newer">Als Nächstes: ein neueres Fahrplanpaket importieren (Fahrplan, Fahrplanpaket importieren).</string>
+  <string name="dataset_action_reimport">Als Nächstes: die Paketdatei erneut auswählen (Fahrplan, Fahrplanpaket importieren).</string>
+  <string name="dataset_action_install_map">Als Nächstes: eine Offline-Karte im Kartenmanager installieren.</string>
+  <string name="dataset_action_recheck">Als Nächstes: diesen Bildschirm verlassen und erneut öffnen, um die Karten erneut zu prüfen.</string>
+  <!-- S1 Kartengenerations-Fakten: die registrierten Kartenversionen wie registriert; nie eine Abdeckungsbehauptung. -->
+  <plurals name="dataset_map_versions">
+    <item quantity="one">Installierte Kartendaten-Version: %1$s. Das bestätigt nicht, dass die Karte Berlin abdeckt.</item>
+    <item quantity="other">Installierte Kartendaten-Versionen: %1$s. Das bestätigt nicht, dass eine davon Berlin abdeckt.</item>
+  </plurals>
+  <string name="dataset_map_versions_more">%1$s sowie %2$d ältere</string>
+  <!-- UX06 manuelle Einrichtung. Argumente: Bezeichnungen von „Karten herunterladen“, Paketimport, Nutzerimport (nicht vertrauenswürdig), offizielles Paket. -->
+  <string name="dataset_setup_guide">Berlin offline von Hand einrichten\n1. Karte: „%1$s“ öffnen und die Karte Berlin installieren. Der Kartenmanager zeigt die tatsächliche Größe jeder Karte. Das Herunterladen braucht eine Verbindung und startet nur, wenn du es dort auslöst.\n2. Fahrplan: „%2$s“ antippen, „%3$s“ wählen („%4$s“ nur für ein signiertes offizielles Paket) und dann die Berliner Fahrplandatei auswählen.\n3. Prüfen: Dieser Bildschirm zeigt danach die Gültigkeit des Fahrplans, ob er nicht vertrauenswürdig ist und ob eine Karte installiert ist. Eine installierte Karte beweist nicht, dass sie Berlin abdeckt, und hier wird nicht geprüft, ob Karte und Fahrplan zusammenpassen.\nSpeicher: Der benötigte Platz hängt von den gewählten Dateien ab. Beim Import können das Archiv, eine temporäre Kopie davon, der entpackte Fahrplan und das vorherige Paket gleichzeitig vorhanden sein. Die Größen kennt die App vorab nicht; prüfe daher vor dem Start den freien Speicher.</string>
+</resources>

@@ -104,6 +104,18 @@ public:
   LevenshteinDFA(UniString const & s, size_t maxErrors);
   LevenshteinDFA(std::string const & s, size_t maxErrors);
 
+  struct MatchResult
+  {
+    bool m_accepts;
+    bool m_rejects;
+    size_t m_errorsMade;
+    size_t m_prefixErrorsMade;
+  };
+
+  // Match one input, retaining the same prefix/misprint/transposition semantics.
+  static MatchResult Match(UniString const & pattern, UniString const & input, size_t prefixSize,
+                           std::array<UniString, 11> const & prefixMisprints, size_t maxErrors);
+
   bool IsEmpty() const { return m_alphabet.empty(); }
 
   Iterator Begin() const { return Iterator(*this); }

@@ -62,6 +62,10 @@ public:
   void SetDrapeEngine(ref_ptr<DrapeEngine> engine);
 
   void AddLine(std::string const & id, DrapeApiLineData const & data);
+  // Reports cache admission while a renderer is attached, not queue delivery or a GPU frame.
+  bool TryAddLine(std::string const & id, DrapeApiLineData const & data);
+  // Cached presentation state only; does not prove the renderer painted a line.
+  bool HasLine(std::string const & id);
   void RemoveLine(std::string const & id);
   void Clear();
   void Invalidate();

@@ -60,6 +60,8 @@ set(SRC
   drape_api_builder.hpp
   drape_api_renderer.cpp
   drape_api_renderer.hpp
+  walking_preview_overlay.cpp
+  walking_preview_overlay.hpp
   drape_engine.cpp
   drape_engine.hpp
   drape_engine_params.hpp
@@ -208,6 +210,10 @@ set(SRC
   visual_params.cpp
   visual_params.hpp
 )
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties(walking_preview_overlay.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math")
+endif()
 
 omim_add_library(${PROJECT_NAME} ${SRC})
 

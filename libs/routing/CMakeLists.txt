@@ -80,6 +80,10 @@ set(SRC
   index_road_graph.hpp
   index_router.cpp
   index_router.hpp
+  registered_walking_maps.cpp
+  registered_walking_maps.hpp
+  offline_walking_provider.cpp
+  offline_walking_provider.hpp
   joint.cpp
   joint.hpp
   joint_index.cpp
@@ -195,6 +199,12 @@ set(SRC
   world_graph.hpp
 )
 
+# Admission handles non-finite external coordinates. Global -ffast-math otherwise
+# folds std::isfinite away before routing, defeating fail-closed input validation.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties(offline_walking_provider.cpp registered_walking_maps.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math")
+endif()
+
 omim_add_library(${PROJECT_NAME} ${SRC})
 
 target_link_libraries(${PROJECT_NAME}
@@ -214,6 +224,7 @@ target_link_libraries(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
   PUBLIC
     opening_hours
+    monocypher
 )
 
 if (PLATFORM_DESKTOP)

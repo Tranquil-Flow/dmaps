@@ -98,8 +98,8 @@ public class GtfsRealtimeTest
     put(o, fBytes(1, cat(fString(1, tripId), fString(5, routeId))));
     for (byte[] s : stops)
       put(o, fBytes(2, s));
-    put(o, fVarint(3, 1791880000L));
-    put(o, fVarint(4, delay));
+    put(o, fVarint(4, 1791880000L));
+    put(o, fVarint(5, delay));
     return o.toByteArray();
   }
 
@@ -151,7 +151,7 @@ public class GtfsRealtimeTest
   }
 
   @Test
-  public void cancellationFlagged()
+  public void ordinaryScheduledTripIsNotCanceled()
   {
     byte[] raw = feed(1L, entity("e", tripUpdate("T200", "S9", 0)));
     GtfsRealtime.TripUpdate u = GtfsRealtime.parse(raw).tripUpdates.get(0);
@@ -181,13 +181,12 @@ public class GtfsRealtimeTest
     catch (WireReader.WireException expected) { /* required */ }
   }
 
-  // ---- the VBB provider deviation --------------------------------------------
+  // ---- semantic magnitude bounds (synthetic; not a provider deviation) --------
 
   @Test
   public void epochInTripDelayIsRejectedAsImplausible()
   {
-    // VBB puts an absolute epoch in TripUpdate.delay, not lateness.
-    // Measured 2026-10-13: field 4 = 1791872519.
+    // Synthetic invalid delay. Canonical field 4 is timestamp, field 5 is delay.
     long epoch = 1791872519L;
     assertFalse(RealtimeMerger.isPlausibleDelay(epoch));
     assertFalse(RealtimeMerger.isPlausibleDelay(-epoch));

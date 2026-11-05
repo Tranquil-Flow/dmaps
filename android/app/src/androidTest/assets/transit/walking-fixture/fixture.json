@@ -1,0 +1,14 @@
+{
+  "fixture_only": true,
+  "scope": "Authored synthetic pedestrian detour and motorway-only negative. NOT Berlin, official map data or platform-access proof.",
+  "files": {
+    "foot.mwm": {
+      "sha256": "9c0d9cc641ebb4257bd29903ea157d851f6b71a551e98c5f82e893975d8fbb34",
+      "bytes": 3215
+    },
+    "road.mwm": {
+      "sha256": "efc0197fdefebb849027cee2af1f0342353045a219578c59cd229e37fbb5cf55",
+      "bytes": 3044
+    }
+  }
+}

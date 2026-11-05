@@ -200,8 +200,9 @@ public class PlacePageOpeningHoursFragment extends Fragment implements Observer<
       else
       {
         // Show whole week timetable.
-        int firstDayOfWeek = Calendar.getInstance(Locale.getDefault()).getFirstDayOfWeek();
-        mOpeningHoursAdapter.setTimetables(timetables, firstDayOfWeek);
+        final Calendar calendar = Calendar.getInstance(Locale.getDefault());
+        final int currentDay = calendar.get(Calendar.DAY_OF_WEEK);
+        mOpeningHoursAdapter.setTimetables(timetables, calendar.getFirstDayOfWeek(), currentDay);
         UiUtils.show(mDropDownIcon);
         mFrame.setOnClickListener((v) -> expandOpeningHours());
 
@@ -216,7 +217,6 @@ public class PlacePageOpeningHoursFragment extends Fragment implements Observer<
 
         // Show today's open time + non-business time.
         boolean containsCurrentWeekday = false;
-        final int currentDay = Calendar.getInstance().get(Calendar.DAY_OF_WEEK);
         for (Timetable tt : timetables)
         {
           if (tt.containsWeekday(currentDay))
@@ -252,6 +252,10 @@ public class PlacePageOpeningHoursFragment extends Fragment implements Observer<
     int targetHeight, startHeight;
     if (!mIsOhExpanded)
     {
+      // The app may have remained open across a day/timezone change while collapsed.
+      onChanged(mViewModel.getMapObject().getValue());
+      if (mDropDownIcon.getVisibility() != View.VISIBLE)
+        return;
       UiUtils.show(mFullWeekOpeningHours);
       startHeight = 0;
       mFullWeekOpeningHours.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
@@ -284,6 +288,13 @@ public class PlacePageOpeningHoursFragment extends Fragment implements Observer<
   {
     super.onStart();
     mViewModel.getMapObject().observe(requireActivity(), this);
+  }
+
+  @Override
+  public void onResume()
+  {
+    super.onResume();
+    onChanged(mViewModel.getMapObject().getValue());
   }
 
   @Override

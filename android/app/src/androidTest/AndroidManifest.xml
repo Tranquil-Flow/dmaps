@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Public code/resource lookup only; no owner Application or private data context. -->
+  <queries><package android:name="app.comaps.fdroid.debug" /></queries>
+  <application android:name="android.app.Application" />
+  <instrumentation android:name="app.organicmaps.transit.SelfHostedWalkingInstrumentation"
+      android:targetPackage="app.comaps.fdroid.debug.test" android:functionalTest="false"
+      android:handleProfiling="false" android:label="DMaps self-targeted native fixture" />
+</manifest>

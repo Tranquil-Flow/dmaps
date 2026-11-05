@@ -3,6 +3,7 @@
 #include "base/internal/message.hpp"
 #include "base/src_point.hpp"
 #include "base/thread.hpp"
+#include "base/thread_log_guard.hpp"
 #include "base/timer.hpp"
 
 #include <array>
@@ -103,8 +104,10 @@ using base::NUM_LOG_LEVELS;
 #define LOG(level, msg)                                      \
   do                                                         \
   {                                                          \
-    if ((level) >= ::base::g_LogLevel)                       \
+    if (::base::IsThreadLoggingEnabled() && (level) >= ::base::g_LogLevel)                       \
       ::base::LogMessage(level, SRC(), ::base::Message msg); \
+    else if (!::base::IsThreadLoggingEnabled() && (level) >= ::base::g_LogLevel && (level) >= ::base::g_LogAbortLevel) \
+      ::base::LogMessage(level, SRC(), "Private local computation failed"); \
   }                                                          \
   while (false)
 
@@ -112,17 +115,22 @@ using base::NUM_LOG_LEVELS;
 #define LOG_SHORT(level, msg)                                           \
   do                                                                    \
   {                                                                     \
-    if ((level) >= ::base::g_LogLevel)                                  \
+    if (::base::IsThreadLoggingEnabled() && (level) >= ::base::g_LogLevel)                                  \
       ::base::LogMessage(level, base::SrcPoint(), ::base::Message msg); \
+    else if (!::base::IsThreadLoggingEnabled() && (level) >= ::base::g_LogLevel && (level) >= ::base::g_LogAbortLevel) \
+      ::base::LogMessage(level, base::SrcPoint(), "Private local computation failed"); \
   }                                                                     \
   while (false)
 
 // Provides logging despite of |g_LogLevel|.
-#define LOG_FORCE(level, msg)                              \
-  do                                                       \
-  {                                                        \
-    ::base::LogMessage(level, SRC(), ::base::Message msg); \
-  }                                                        \
+#define LOG_FORCE(level, msg)                               \
+  do                                                        \
+  {                                                         \
+    if (::base::IsThreadLoggingEnabled())                    \
+      ::base::LogMessage(level, SRC(), ::base::Message msg);  \
+    else if ((level) >= ::base::g_LogAbortLevel)              \
+      ::base::LogMessage(level, SRC(), "Private local computation failed"); \
+  }                                                         \
   while (false)
 
 // Conditional log. Logs @msg with level @level in case when @X returns false.

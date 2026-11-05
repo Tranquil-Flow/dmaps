@@ -1119,6 +1119,12 @@ void Framework::StopLocationFollow()
     m_drapeEngine->StopLocationFollow();
 }
 
+void Framework::StopLocationFollowForPreview()
+{
+  if (m_drapeEngine != nullptr)
+    m_drapeEngine->StopLocationFollowForPreview();
+}
+
 void Framework::OnSize(int w, int h)
 {
   if (m_drapeEngine != nullptr)

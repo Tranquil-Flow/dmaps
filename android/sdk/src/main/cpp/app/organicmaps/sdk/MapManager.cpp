@@ -1,4 +1,6 @@
 #include "Framework.hpp"
+#include "app/organicmaps/sdk/transit/RegisteredWalkingMaps.hpp"
+#include "base/thread_log_guard.hpp"
 
 #include "app/organicmaps/sdk/core/jni_helper.hpp"
 #include "app/organicmaps/sdk/core/jni_java_methods.hpp"
@@ -629,5 +631,15 @@ JNIEXPORT jboolean JNICALL Java_app_organicmaps_sdk_downloader_MapManager_native
                                                                                                   jstring country_id)
 {
   return GetStorage().IsMapTooOldToEdit(jni::ToNativeString(env, country_id));
+}
+// Capture on the Framework owner thread; cached registry metadata only, not a file lease.
+JNIEXPORT jobject JNICALL Java_app_organicmaps_sdk_transit_RegisteredWalkingMaps_nativeCapture(JNIEnv * env,jclass)
+{
+  base::ScopedThreadLogSilencer quiet;
+  try {
+    if(g_framework&&g_framework->NativeFramework())
+      return walking_jni::ToRegisteredWalkingMaps(env,routing::CaptureRegisteredWalkingMaps(g_framework->NativeFramework()->GetDataSource()));
+  }catch(...){if(env->ExceptionCheck())return nullptr;}
+  return walking_jni::ToRegisteredWalkingMaps(env,{});
 }
 }  // extern "C"

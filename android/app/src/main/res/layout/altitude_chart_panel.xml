@@ -57,10 +57,17 @@
       android:layout_height="wrap_content"
       android:orientation="vertical"
       android:layout_weight="1">
-      <com.google.android.material.imageview.ShapeableImageView
-        android:id="@+id/altitude_chart"
+      <FrameLayout
+        android:id="@+id/route_altitude_slot"
+        android:visibility="gone"
         android:layout_height="wrap_content"
-        android:layout_width="match_parent" />
+        android:layout_width="match_parent">
+        <com.google.android.material.imageview.ShapeableImageView
+          android:id="@+id/altitude_chart"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content" />
+        <include layout="@layout/route_altitude_chart" />
+      </FrameLayout>
       <com.google.android.material.textview.MaterialTextView
         android:id="@+id/time_vehicle"
         android:layout_height="wrap_content"

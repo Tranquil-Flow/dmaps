@@ -31,6 +31,8 @@ public class RoutingPlanInplaceController extends RoutingPlanController
 
   public void show(final boolean show)
   {
+    if (!show)
+      clearRouteAltitudeChart();
     if (mAnimator != null)
     {
       mAnimator.cancel();

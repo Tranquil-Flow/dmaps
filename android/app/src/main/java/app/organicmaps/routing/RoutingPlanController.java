@@ -203,6 +203,7 @@ public class RoutingPlanController extends ToolbarController
 
     if (isTransitType())
     {
+      clearRouteAltitudeChart();
       TransitRouteInfo info = RoutingController.get().getCachedTransitInfo();
       if (info != null)
         mRoutingBottomMenuController.showTransitInfo(info);
@@ -211,6 +212,7 @@ public class RoutingPlanController extends ToolbarController
 
     if (isRulerType())
     {
+      clearRouteAltitudeChart();
       RoutingInfo routingInfo = RoutingController.get().getCachedRoutingInfo();
       if (routingInfo != null)
         mRoutingBottomMenuController.showRulerInfo(Framework.nativeGetRoutePoints(), routingInfo.distToTarget);
@@ -220,6 +222,11 @@ public class RoutingPlanController extends ToolbarController
     final boolean showStartButton = !RoutingController.get().isRulerRouterType();
     mRoutingBottomMenuController.setStartButton(showStartButton);
     mRoutingBottomMenuController.showAltitudeChartAndRoutingDetails();
+  }
+
+  protected void clearRouteAltitudeChart()
+  {
+    mRoutingBottomMenuController.clearRouteAltitudeChart();
   }
 
   public void updateBuildProgress(int progress, @NonNull Router router)

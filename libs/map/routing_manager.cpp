@@ -4,6 +4,7 @@
 #include "map/bookmark_manager.hpp"
 #include "map/chart_generator.hpp"
 #include "map/routing_mark.hpp"
+#include "map/route_order_optimizer.hpp"
 #include "map/transit/transit_reader.hpp"
 #include "map/user_mark.hpp"
 
@@ -56,6 +57,8 @@
 #include "base/stl_helpers.hpp"
 #include "base/string_utils.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <ios>
 #include <map>
 
@@ -1144,6 +1147,136 @@ void RoutingManager::ReorderIntermediatePoints()
   addedPoint->SetIntermediateIndex(insertIndex);
   for (size_t i = 0; i < prevPoints.size(); ++i)
     prevPoints[i]->SetIntermediateIndex(i < insertIndex ? i : i + 1);
+}
+
+bool RoutingManager::OptimizeRoutePoints()
+{
+  CHECK_THREAD_CHECKER(m_threadChecker, ("OptimizeRoutePoints"));
+  if (m_bmManager == nullptr || m_currentRouterType == RouterType::Ruler ||
+      m_routingSession.IsFollowing() || m_routingSession.IsBuilding())
+    return false;
+
+  // Read through the const bookmark API: GetRoutePoints() opens an edit session
+  // and marks every point updated, even when the eventual proposal is rejected.
+  auto const & ids = m_bmManager->GetUserMarkIds(UserMark::Type::ROUTING);
+  if (ids.size() < 4 || ids.size() - 2 > RoutePointsLayout::kMaxIntermediatePointsCount)
+    return false;
+  vector<RouteMarkPoint const *> original;
+  original.reserve(ids.size());
+  for (auto const id : ids)
+  {
+    auto const * mark = m_bmManager->GetMark<RouteMarkPoint>(id);
+    // Stored My Position coordinates need not be resolved (BuildRoute resolves
+    // only its copy). Refuse rather than treating a placeholder as current GPS.
+    if (mark == nullptr || mark->IsMyPosition())
+      return false;
+    original.push_back(mark);
+  }
+  std::sort(original.begin(), original.end(), [](auto const * a, auto const * b)
+  {
+    if (a->GetRoutePointType() != b->GetRoutePointType())
+      return a->GetRoutePointType() < b->GetRoutePointType();
+    return a->GetIntermediateIndex() < b->GetIntermediateIndex();
+  });
+  vector<RouteMarkData> snapshot;
+  vector<kml::MarkId> originalIds;
+  snapshot.reserve(original.size());
+  originalIds.reserve(original.size());
+  for (auto const * mark : original)
+  {
+    snapshot.push_back(mark->GetMarkData());
+    originalIds.push_back(mark->GetId());
+  }
+  auto const proposal = route_order::ProposeShorterOrder(snapshot);
+  if (proposal.m_status != route_order::ProposalStatus::Shorter ||
+      proposal.m_points.size() != snapshot.size())
+    return false;
+
+  auto const same = [](RouteMarkData const & a, RouteMarkData const & b, bool includeIndex)
+  {
+    return a.m_title == b.m_title && a.m_subTitle == b.m_subTitle &&
+           a.m_pointType == b.m_pointType && (!includeIndex || a.m_intermediateIndex == b.m_intermediateIndex) &&
+           a.m_isVisible == b.m_isVisible && a.m_isMyPosition == b.m_isMyPosition &&
+           a.m_isPassed == b.m_isPassed &&
+           a.m_replaceWithMyPositionAfterRestart == b.m_replaceWithMyPositionAfterRestart &&
+           a.m_position == b.m_position;
+  };
+  size_t lastPassed = 0;
+  for (size_t i = 1; i + 1 < snapshot.size(); ++i)
+    if (snapshot[i].m_isPassed)
+      lastPassed = i;
+
+  // Resolve a complete bijection BEFORE editing. Pin prefix/endpoints by source
+  // slot, not by coordinate or value equality; identical points cannot steal a
+  // frozen mark. In the remaining suffix, take the first unused full-metadata
+  // match (only the index may differ). Indistinguishable duplicates are stable.
+  vector<size_t> source(snapshot.size());
+  vector<bool> used(snapshot.size(), false);
+  for (size_t slot = 0; slot < snapshot.size(); ++slot)
+  {
+    auto const & point = proposal.m_points[slot];
+    if (slot <= lastPassed || slot + 1 == snapshot.size())
+    {
+      if (!same(point, snapshot[slot], true))
+        return false;
+      source[slot] = slot;
+    }
+    else
+    {
+      if (point.m_pointType != RouteMarkType::Intermediate || point.m_intermediateIndex != slot - 1)
+        return false;
+      size_t match = lastPassed + 1;
+      for (; match + 1 < snapshot.size(); ++match)
+        if (!used[match] && same(point, snapshot[match], false))
+          break;
+      if (match + 1 == snapshot.size())
+        return false;
+      source[slot] = match;
+    }
+    if (used[source[slot]])
+      return false;
+    used[source[slot]] = true;
+  }
+  // Check the resolved live-source order too; never trust a Shorter status alone.
+  auto const length = [&](bool reordered, size_t first)
+  {
+    double result = 0.0;
+    for (size_t i = first; i + 1 < snapshot.size(); ++i)
+      result += mercator::DistanceOnEarth(snapshot[reordered ? source[i] : i].m_position,
+                                         snapshot[reordered ? source[i + 1] : i + 1].m_position);
+    return result;
+  };
+  for (size_t const first : {size_t{0}, lastPassed})
+  {
+    double const before = length(false, first);
+    double const after = length(true, first);
+    if (!std::isfinite(before) || !std::isfinite(after) || !(after < before))
+      return false;
+  }
+
+  // Synchronous owning-thread operation: no queued proposal, provider lookup or
+  // callback between snapshot and writes. Recheck membership, identity, metadata
+  // and policy at the write boundary. This is not cross-thread/crash atomicity.
+  if (m_currentRouterType == RouterType::Ruler || m_routingSession.IsFollowing() ||
+      m_routingSession.IsBuilding() ||
+      m_bmManager->GetUserMarkIds(UserMark::Type::ROUTING).size() != original.size())
+    return false;
+  for (size_t i = 0; i < original.size(); ++i)
+  {
+    auto const id = originalIds[i];
+    if (ids.find(id) == ids.end() || m_bmManager->GetMark<RouteMarkPoint>(id) != original[i] ||
+        !same(original[i]->GetMarkData(), snapshot[i], true))
+      return false;
+  }
+  vector<RouteMarkPoint *> edits(snapshot.size(), nullptr);
+  auto editSession = m_bmManager->GetEditSession();
+  for (size_t slot = lastPassed + 1; slot + 1 < snapshot.size(); ++slot)
+    if (source[slot] != slot)
+      edits[slot] = editSession.GetMarkForEdit<RouteMarkPoint>(original[source[slot]]->GetId());
+  for (size_t slot = lastPassed + 1; slot + 1 < snapshot.size(); ++slot)
+    if (edits[slot] != nullptr)
+      edits[slot]->SetIntermediateIndex(slot - 1);
+  return true;
 }
 
 void RoutingManager::GenerateNotifications(vector<string> & turnNotifications, bool announceStreets)

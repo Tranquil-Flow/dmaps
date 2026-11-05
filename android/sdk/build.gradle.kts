@@ -75,6 +75,14 @@ android {
             externalNativeBuild.cmake.arguments += "-DANDROID_STL=c++_shared"
             if (!project.hasProperty("disableHWAsan"))
               externalNativeBuild.cmake.arguments += "-DENABLE_ASAN=ON"
+            // Keep interactive native search usable without disabling DEBUG assertions or HWASan.
+            // Opt out with -PunoptimizedNativeDebug for instruction-by-instruction debugging.
+            if (!project.hasProperty("unoptimizedNativeDebug")) {
+                externalNativeBuild.cmake.arguments += listOf(
+                    "-DCMAKE_CXX_FLAGS_DEBUG=-O2",
+                    "-DCMAKE_C_FLAGS_DEBUG=-O2",
+                )
+            }
         }
         register("beta") {
             matchingFallbacks += "release"

@@ -33,6 +33,7 @@ public class ManageRouteAdapter extends RecyclerView.Adapter<ManageRouteAdapter.
     void startDrag(RecyclerView.ViewHolder viewHolder);
     void showMyLocationIcon(boolean showMyLocationIcon);
     void onRoutePointDeleted(RecyclerView.ViewHolder viewHolder);
+    void onRoutePointReplace(int intermediateIndex);
   }
 
   public ManageRouteAdapter(Context context, RouteMarkData[] routeMarkData, ManageRouteListener listener)
@@ -104,7 +105,17 @@ public class ManageRouteAdapter extends RecyclerView.Adapter<ManageRouteAdapter.
       subtitle = mRoutePoints.get(position).mSubtitle;
     }
 
-    holder.mTextViewTitle.setText(title);
+    boolean replaceable = mRoutePoints.get(position).mPointType == RouteMarkType.Intermediate;
+    holder.mTextViewTitle.setText(replaceable ? mContext.getString(R.string.waypoint_replace_label, title) : title);
+    holder.mTextViewTitle.setOnClickListener(replaceable ? v -> {
+      int current = holder.getBindingAdapterPosition();
+      if (current == RecyclerView.NO_POSITION || current >= mRoutePoints.size())
+        return;
+      RouteMarkData selected = mRoutePoints.get(current);
+      if (selected.mPointType == RouteMarkType.Intermediate)
+        mManageRouteListener.onRoutePointReplace(selected.mIntermediateIndex);
+    } : null);
+    holder.mTextViewTitle.setClickable(replaceable);
     holder.mTextViewSubtitle.setText(subtitle);
     UiUtils.showIf(subtitle != null && !subtitle.isEmpty(), holder.mTextViewSubtitle);
 
@@ -112,9 +123,10 @@ public class ManageRouteAdapter extends RecyclerView.Adapter<ManageRouteAdapter.
     UiUtils.showIf(mRoutePoints.size() > 2, holder.mViewDivider);
     UiUtils.showIf(mRoutePoints.size() > 2, holder.mImageViewDelete);
 
+    UiUtils.showIf(mRoutePoints.size() > 1, holder.mImageViewSwap);
     holder.mImageViewSwap.setOnTouchListener((v, event) ->
     {
-      if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
+      if (mRoutePoints.size() > 1 && event.getActionMasked() == MotionEvent.ACTION_DOWN)
         mManageRouteListener.startDrag(holder);
 
       return false;

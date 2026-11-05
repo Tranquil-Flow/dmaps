@@ -609,6 +609,11 @@ void MyPositionController::OnLocationUpdate(location::GpsInfo const & info,
       ChangeMode(location::FollowAndRotate, true);
       UpdateViewport(kMaxScaleZoomLevel);
     }
+    else if (m_pendingFollowReleased)
+    {
+      // Released by a temporary presentation while waiting: keep acquiring, do not move the viewport.
+      ChangeMode(location::NotFollow, true);
+    }
     else
     {
       ChangeMode(location::Follow, true);
@@ -778,6 +783,9 @@ void MyPositionController::ChangeMode(location::EMyPositionMode newMode, bool sh
     ResetBlockAutoZoomTimer();
 
   m_mode = newMode;
+  // The preview release applies only to the current pending wait; any other mode ends it.
+  if (newMode != location::PendingPosition)
+    m_pendingFollowReleased = false;
 
   // We should remember this mode if the user intentionally caused the mode change
   // (e.g. tapping the mode button)
@@ -809,6 +817,13 @@ void MyPositionController::StopLocationFollow()
   m_desiredInitMode = location::NotFollow;
 
   ResetRoutingNotFollowTimer();
+}
+
+void MyPositionController::StopLocationFollowForPreview()
+{
+  StopLocationFollow();
+  if (m_mode == location::PendingPosition && !m_isInRouting)
+    m_pendingFollowReleased = true;
 }
 
 void MyPositionController::OnEnterForeground(double backgroundTime)

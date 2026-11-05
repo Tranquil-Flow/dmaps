@@ -290,4 +290,46 @@ UNIT_TEST(LevenshteinDFA_PrefixDFASmoke)
     }
   }
 }
+UNIT_TEST(LevenshteinDFA_OneInputMatchesEnumeratedAutomaton)
+{
+  auto uni = [](std::u32string_view text) { return UniString(text.begin(), text.end()); };
+  vector<UniString> words{uni(U"")};
+  size_t start = 0, end = 1;
+  for (size_t length = 1; length <= 3; ++length)
+  {
+    for (size_t i = start; i < end; ++i)
+      for (auto c : std::u32string_view(U"abä"))
+      {
+        auto next = words[i];
+        next.push_back(c);
+        words.push_back(std::move(next));
+      }
+    start = end;
+    end = words.size();
+  }
+  for (auto text : {U"berlin", U"berlni", U"berliner", U"straße", U"strasse", U"alexanderplatz",
+                    U"12345", U"東京", U"a🦊b", U"абвгд"})
+    words.push_back(uni(text));
+
+  std::array<UniString, 11> misprints{};
+  misprints[0] = uni(U"aä");
+  misprints[1] = uni(U"bб");
+  for (auto const & pattern : words)
+    for (size_t prefix = 0; prefix <= std::min<size_t>(2, pattern.size()); ++prefix)
+      for (size_t errors = 0; errors <= 2; ++errors)
+      {
+        LevenshteinDFA const oracle(pattern, prefix, misprints, errors);
+        for (auto const & input : words)
+        {
+          auto it = oracle.Begin();
+          for (auto c : input)
+            it.Move(c);
+          auto const direct = LevenshteinDFA::Match(pattern, input, prefix, misprints, errors);
+          TEST_EQUAL(direct.m_accepts, it.Accepts(), (pattern, input, prefix, errors));
+          TEST_EQUAL(direct.m_rejects, it.Rejects(), (pattern, input, prefix, errors));
+          TEST_EQUAL(direct.m_errorsMade, it.ErrorsMade(), (pattern, input, prefix, errors));
+          TEST_EQUAL(direct.m_prefixErrorsMade, it.PrefixErrorsMade(), (pattern, input, prefix, errors));
+        }
+      }
+}
 }  // namespace levenshtein_dfa_test

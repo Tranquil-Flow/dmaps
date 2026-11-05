@@ -13,9 +13,14 @@ void DrapeApi::SetDrapeEngine(ref_ptr<DrapeEngine> engine)
 
 void DrapeApi::AddLine(std::string const & id, DrapeApiLineData const & data)
 {
+  TryAddLine(id, data);
+}
+
+bool DrapeApi::TryAddLine(std::string const & id, DrapeApiLineData const & data)
+{
   DrapeEngineLockGuard lock(m_engine);
   if (!lock)
-    return;
+    return false;
 
   auto & threadCommutator = lock.Get()->m_threadCommutator;
   auto const it = m_lines.find(id);
@@ -31,16 +36,24 @@ void DrapeApi::AddLine(std::string const & id, DrapeApiLineData const & data)
   lines.insert(std::make_pair(id, data));
   threadCommutator->PostMessage(ThreadsCommutator::ResourceUploadThread, make_unique_dp<DrapeApiAddLinesMessage>(lines),
                                 MessagePriority::Normal);
+  return true;
+}
+
+bool DrapeApi::HasLine(std::string const & id)
+{
+  DrapeEngineLockGuard lock(m_engine);
+  return m_lines.count(id) != 0;
 }
 
 void DrapeApi::RemoveLine(std::string const & id)
 {
   DrapeEngineLockGuard lock(m_engine);
+  // Retire replay state even when the renderer has already been detached.
+  m_lines.erase(id);
   if (!lock)
     return;
 
   auto & threadCommutator = lock.Get()->m_threadCommutator;
-  m_lines.erase(id);
   threadCommutator->PostMessage(ThreadsCommutator::ResourceUploadThread, make_unique_dp<DrapeApiRemoveMessage>(id),
                                 MessagePriority::Normal);
 }
@@ -48,11 +61,12 @@ void DrapeApi::RemoveLine(std::string const & id)
 void DrapeApi::Clear()
 {
   DrapeEngineLockGuard lock(m_engine);
+  // A later renderer must not resurrect lines explicitly cleared while absent.
+  m_lines.clear();
   if (!lock)
     return;
 
   auto & threadCommutator = lock.Get()->m_threadCommutator;
-  m_lines.clear();
   threadCommutator->PostMessage(ThreadsCommutator::ResourceUploadThread,
                                 make_unique_dp<DrapeApiRemoveMessage>("", true /* remove all */),
                                 MessagePriority::Normal);

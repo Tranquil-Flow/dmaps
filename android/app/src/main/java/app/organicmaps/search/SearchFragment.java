@@ -55,6 +55,11 @@ import java.util.List;
 
 public class SearchFragment extends BaseMwmFragment implements SearchListener, CategoriesAdapter.CategoriesUiListener
 {
+  // Initial-locale behavior adapted from Organic Maps SearchRequest (Apache-2.0); see NOTICE.
+  private static final String STATE_QUERY = "search.current.query";
+  private static final String STATE_LOCALE = "search.current.locale";
+  private static final String STATE_CATEGORY = "search.current.category";
+  private static final String STATE_ON_MAP = "search.pending.on_map";
   private long mLastQueryTimestamp;
   private boolean compatibleContactsAppInstalled = true;
   @NonNull
@@ -84,8 +89,12 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
     @Override
     protected void onTextChanged(String query)
     {
-      if (!isAdded())
+      // Restoring EditText state precedes onResume; only the explicit initial setQuery may dispatch it.
+      if (!isAdded() || (mInitialQuery != null && !mApplyingInitialQuery))
         return;
+
+      if (!mApplyingInitialQuery)
+        mInitialLocale = null;
 
       if (TextUtils.isEmpty(query))
       {
@@ -102,7 +111,8 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
         return;
       }
 
-      runSearch();
+      if (!mApplyingInitialQuery || !mInitialSearchOnMap)
+        runSearch();
     }
 
     @Override
@@ -173,6 +183,9 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
   @Nullable
   private String mInitialLocale;
   private boolean mInitialSearchOnMap = false;
+  private boolean mInitialIsCategory;
+  private boolean mApplyingInitialQuery;
+  private boolean mArgumentsRead;
 
   private final ActivityResultLauncher<Intent> startVoiceRecognitionForResult =
       registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
@@ -271,6 +284,7 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
     super.onViewCreated(view, savedInstanceState);
     mSearchAdapter = new SearchAdapter(this);
     readArguments();
+    restoreSearchState(savedInstanceState);
 
     ViewGroup root = (ViewGroup) view;
     mTabFrame = root.findViewById(R.id.tab_frame);
@@ -334,9 +348,6 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
     SearchEngine.INSTANCE.addListener(this);
 
     tabAdapter.setTabSelectedListener(tab -> mToolbarController.deactivate());
-
-    if (mInitialSearchOnMap)
-      showAllResultsOnMap();
   }
 
   @Override
@@ -346,15 +357,52 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
     mToolbarController.attach(requireActivity());
   }
 
+  @Override
   public void onResume()
   {
     super.onResume();
     MwmApplication.from(requireContext()).getLocationHelper().addListener(mLocationListener);
     if (mInitialQuery != null)
     {
-      setQuery(mInitialQuery, false);
-      mInitialQuery = null;
+      mApplyingInitialQuery = true;
+      try
+      {
+        setQuery(mInitialQuery, mInitialIsCategory);
+      }
+      finally
+      {
+        mApplyingInitialQuery = false;
+        mInitialQuery = null;
+      }
     }
+    if (mInitialSearchOnMap)
+    {
+      mInitialSearchOnMap = false;
+      if (mToolbarController.hasQuery())
+        showAllResultsOnMap();
+    }
+  }
+
+  @Override
+  public void onSaveInstanceState(@NonNull Bundle outState)
+  {
+    super.onSaveInstanceState(outState);
+    if (mToolbarController == null)
+      return;
+    outState.putString(STATE_QUERY, mInitialQuery != null ? mInitialQuery : getQuery());
+    outState.putString(STATE_LOCALE, mInitialLocale);
+    outState.putBoolean(STATE_CATEGORY, mInitialQuery != null ? mInitialIsCategory : isCategory());
+    outState.putBoolean(STATE_ON_MAP, mInitialSearchOnMap);
+  }
+
+  private void restoreSearchState(@Nullable Bundle state)
+  {
+    if (state == null || !state.containsKey(STATE_QUERY))
+      return;
+    mInitialQuery = state.getString(STATE_QUERY);
+    mInitialLocale = state.getString(STATE_LOCALE);
+    mInitialIsCategory = state.getBoolean(STATE_CATEGORY);
+    mInitialSearchOnMap = state.getBoolean(STATE_ON_MAP);
   }
 
   @Override
@@ -369,6 +417,17 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
   {
     super.onStop();
     mToolbarController.detach();
+  }
+
+  @Override
+  public void onDestroyView()
+  {
+    if (mToolbarController != null && mInitialQuery == null)
+    {
+      mInitialQuery = getQuery();
+      mInitialIsCategory = isCategory();
+    }
+    super.onDestroyView();
   }
 
   @Override
@@ -397,6 +456,9 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
 
   private void readArguments()
   {
+    if (mArgumentsRead)
+      return;
+    mArgumentsRead = true;
     final Bundle arguments = getArguments();
     if (arguments == null)
       return;
@@ -460,6 +522,8 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
 
   void showAllResultsOnMap()
   {
+    // Map browsing retires managed edits, but preserves ordinary endpoint continuation.
+    RoutingController.get().cancelManagedRoutePointEdit();
     SearchEngine.INSTANCE.updateViewportWithLastResults();
 
     // The previous search should be cancelled before the new one is started, since previous search
@@ -513,14 +577,16 @@ public class SearchFragment extends BaseMwmFragment implements SearchListener, C
     SearchEngine.INSTANCE.cancel();
 
     mLastQueryTimestamp = System.nanoTime();
+    final String locale = !TextUtils.isEmpty(mInitialLocale)
+        ? mInitialLocale : Language.getKeyboardLocale(requireContext());
     if (isTabletSearch())
     {
-      SearchEngine.INSTANCE.searchInteractive(requireContext(), getQuery(), isCategory(), mLastQueryTimestamp,
+      SearchEngine.INSTANCE.searchInteractive(getQuery(), isCategory(), locale, mLastQueryTimestamp,
                                               true /* isMapAndTable */);
     }
     else
     {
-      if (!SearchEngine.INSTANCE.search(requireContext(), getQuery(), isCategory(), mLastQueryTimestamp,
+      if (!SearchEngine.INSTANCE.search(getQuery(), isCategory(), locale, mLastQueryTimestamp,
                                         mLastPosition.valid, mLastPosition.lat, mLastPosition.lon))
       {
         return;

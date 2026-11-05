@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="waypoint_replace_label">%1$s — Ersetzen</string>
+  <string name="waypoint_replace_unavailable">Zum Ersetzen eines Zwischenziels zuerst andere Änderungen mit Planen übernehmen oder die Route erneut öffnen. Ersetzen ist beim Planen einer Fuß-, Fahrrad- oder Autoroute verfügbar.</string>
+  <string name="waypoint_append_label">Zwischenziel vor dem Ziel hinzufügen</string>
+  <string name="waypoint_append_unavailable">Derzeit kann kein Zwischenziel hinzugefügt werden. Zuerst eine vollständige Fuß-, Fahrrad- oder Autoroute planen und ausstehende Änderungen mit Planen übernehmen. Eine Route muss verfügbar sein und Platz für ein weiteres Zwischenziel haben.</string>
+  <string name="waypoint_choose_start">Start über Suche wählen</string>
+  <string name="waypoint_choose_finish">Ziel über Suche wählen</string>
+  <string name="waypoint_endpoint_unavailable">Diese Route kann derzeit nicht vervollständigt werden. Eine Fuß-, Fahrrad- oder Autoroute mit genau einem Endpunkt erneut öffnen.</string>
+</resources>

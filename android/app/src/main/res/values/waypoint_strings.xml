@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="waypoint_replace_label">%1$s — Replace</string>
+  <string name="waypoint_replace_unavailable">To replace a stop, first apply other edits with Plan, or reopen the route. Replacement is available while planning a walking, cycling or driving route.</string>
+  <string name="waypoint_append_label">Add stop before destination</string>
+  <string name="waypoint_append_unavailable">Cannot add a stop now. First plan a complete walking, cycling or driving route and apply pending edits with Plan. A route must be available and have room for another stop.</string>
+  <string name="waypoint_choose_start">Choose start in search</string>
+  <string name="waypoint_choose_finish">Choose destination in search</string>
+  <string name="waypoint_endpoint_unavailable">Cannot complete this route now. Reopen a walking, cycling or driving route with exactly one endpoint.</string>
+</resources>

@@ -146,6 +146,9 @@ public:
   void EnableAutoZoomInRouting(bool enableAutoZoom);
 
   void StopLocationFollow();
+  // Temporary presentations (DMaps walking preview): also release a pending wait so a returning
+  // fix acquires position silently instead of re-entering Follow over the presented viewport.
+  void StopLocationFollowForPreview();
   void NextMode(ScreenBase const & screen);
   void LoseLocation();
   location::EMyPositionMode GetCurrentMode() const { return m_mode; }
@@ -262,6 +265,7 @@ private:
 
   bool m_positionIsObsolete;
   bool m_needBlockAutoZoom;
+  bool m_pendingFollowReleased = false;
 
   uint64_t m_routingNotFollowNotifyId;
   uint64_t m_blockAutoZoomNotifyId;

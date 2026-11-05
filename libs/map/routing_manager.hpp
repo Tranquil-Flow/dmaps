@@ -239,6 +239,17 @@ public:
 
   void AddRoutePoint(RouteMarkData && markData, bool reorderIntermediatePoints = true);
   void ContinueRouteToPoint(RouteMarkData && markData);
+  // Explicit opt-in only: commit strictly shorter geometric stop order in place.
+  // Preserve IDs/endpoints/prefix through last passed stop and every non-index field.
+  // Refuse following/building, Ruler, invalid/incomplete/over-cap layouts and any
+  // My Position mark (stored coordinates may be unresolved). No settings, GPS,
+  // save/load or rebuild. After true, any existing calculated route/checkpoints
+  // are stale: the caller must reconcile/rebuild before following or consuming
+  // them as the optimized route, including queued old checkpoint notifications
+  // and rebuild failure. No caller/activation is provided by this mechanism.
+  // Owning thread only; index writes are not crash/observer-atomic publication.
+  bool OptimizeRoutePoints();
+
   std::vector<RouteMarkData> GetRoutePoints() const;
   size_t GetRoutePointsCount() const;
   void RemoveRoutePoint(RouteMarkType type, size_t intermediateIndex = 0);

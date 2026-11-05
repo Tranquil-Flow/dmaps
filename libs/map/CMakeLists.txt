@@ -46,6 +46,8 @@ set(SRC
   power_management/power_manager.hpp
   power_management/power_management_schemas.cpp
   power_management/power_management_schemas.hpp
+  route_order_optimizer.cpp
+  route_order_optimizer.hpp
   routing_manager.cpp
   routing_manager.hpp
   routing_mark.cpp
@@ -84,6 +86,15 @@ if (PLATFORM_DESKTOP)
   )
 endif()
 
+# Snapshot validation and strict length comparisons require IEEE NaN/Inf semantics.
+# Keep this boundary outside unity so the project's fast-math flags cannot erase them.
+set_source_files_properties(route_order_optimizer.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+if (MSVC)
+  set_property(SOURCE route_order_optimizer.cpp APPEND PROPERTY COMPILE_OPTIONS /fp:strict)
+else()
+  set_property(SOURCE route_order_optimizer.cpp APPEND PROPERTY COMPILE_OPTIONS -fno-fast-math)
+endif()
+
 omim_add_library(${PROJECT_NAME} ${SRC})
 
 target_link_libraries(${PROJECT_NAME}
@@ -117,6 +128,7 @@ target_link_libraries(${PROJECT_NAME}
 
 omim_add_test_subdirectory(map_integration_tests)
 omim_add_test_subdirectory(map_tests)
+omim_add_test_subdirectory(route_order_tests)
 omim_add_test_subdirectory(mwm_tests)
 omim_add_test_subdirectory(style_tests)
 

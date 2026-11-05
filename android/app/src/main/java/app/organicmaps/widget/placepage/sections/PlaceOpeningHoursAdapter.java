@@ -3,6 +3,7 @@ package app.organicmaps.widget.placepage.sections;
 import static app.organicmaps.editor.data.TimeFormatUtils.formatWeekdaysRange;
 
 import android.content.res.Resources;
+import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,6 +20,8 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+/** Today-row emphasis adapted from Organic Maps WeekScheduleBuilder, Apache-2.0.
+ * Modified for CoMaps locale-first grouping; see NOTICE. */
 public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningHoursAdapter.ViewHolder>
 {
   private List<WeekScheduleData> mWeekSchedule = Collections.emptyList();
@@ -27,6 +30,13 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
 
   public void setTimetables(Timetable[] timetables, int firstDayOfWeek)
   {
+    setTimetables(timetables, firstDayOfWeek, Calendar.getInstance().get(Calendar.DAY_OF_WEEK));
+  }
+
+  public void setTimetables(Timetable[] timetables, int firstDayOfWeek, int currentDayOfWeek)
+  {
+    if (currentDayOfWeek < Calendar.SUNDAY || currentDayOfWeek > Calendar.SATURDAY)
+      throw new IllegalArgumentException("Current weekday is out of range [1..7]");
     final List<Integer> weekDays = buildWeekByFirstDay(firstDayOfWeek);
     final List<WeekScheduleData> scheduleData = new ArrayList<>();
 
@@ -44,7 +54,7 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
 
         i--;
         final int endWeekDay = weekDays.get(i);
-        scheduleData.add(new WeekScheduleData(startWeekDay, endWeekDay, tt));
+        scheduleData.add(new WeekScheduleData(startWeekDay, endWeekDay, tt, currentDayOfWeek));
       }
       else
       {
@@ -56,7 +66,7 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
           i++;
         }
 
-        scheduleData.add(new WeekScheduleData(startWeekDay, weekDays.get(i), null));
+        scheduleData.add(new WeekScheduleData(startWeekDay, weekDays.get(i), null, currentDayOfWeek));
       }
     }
 
@@ -102,19 +112,18 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
     final WeekScheduleData schedule = mWeekSchedule.get(position);
     final Resources res = holder.itemView.getResources();
 
+    holder.setWeekdays(formatWeekdaysRange(schedule.startWeekDay, schedule.endWeekDay), schedule.isToday);
     if (schedule.isClosed)
     {
-      holder.setWeekdays(formatWeekdaysRange(schedule.startWeekDay, schedule.endWeekDay));
-      holder.setShifts(new String[] {res.getString(R.string.day_off)});
+      holder.setShifts(new String[] {res.getString(R.string.day_off)}, schedule.isToday);
       return;
     }
 
     final Timetable tt = schedule.timetable;
-    holder.setWeekdays(formatWeekdaysRange(schedule.startWeekDay, schedule.endWeekDay));
     if (tt.isFullday)
-      holder.setShifts(new String[] {res.getString(R.string.editor_time_allday)});
+      holder.setShifts(new String[] {res.getString(R.string.editor_time_allday)}, schedule.isToday);
     else
-      holder.setShifts(TimeFormatUtils.getShiftStrings(tt));
+      holder.setShifts(TimeFormatUtils.getShiftStrings(tt), schedule.isToday);
   }
 
   @Override
@@ -129,13 +138,22 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
     public final int endWeekDay;
     public final boolean isClosed;
     public final Timetable timetable;
+    public final boolean isToday;
 
     public WeekScheduleData(int startWeekDay, int endWeekDay, Timetable timetable)
+    {
+      this(startWeekDay, endWeekDay, timetable, 0);
+    }
+
+    public WeekScheduleData(int startWeekDay, int endWeekDay, Timetable timetable, int currentDayOfWeek)
     {
       this.startWeekDay = startWeekDay;
       this.endWeekDay = endWeekDay;
       this.isClosed = timetable == null;
       this.timetable = timetable;
+      this.isToday = currentDayOfWeek != 0 && (startWeekDay <= endWeekDay
+          ? startWeekDay <= currentDayOfWeek && currentDayOfWeek <= endWeekDay
+          : currentDayOfWeek >= startWeekDay || currentDayOfWeek <= endWeekDay);
     }
   }
 
@@ -152,12 +170,15 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
       itemView.setVisibility(View.VISIBLE);
     }
 
-    public void setWeekdays(String weekdays)
+    public void setWeekdays(String weekdays, boolean isToday)
     {
       mWeekdays.setText(weekdays);
+      mWeekdays.setTypeface(Typeface.create(mWeekdays.getTypeface(), isToday ? Typeface.BOLD : Typeface.NORMAL));
+      mWeekdays.setContentDescription(isToday
+          ? mWeekdays.getResources().getString(app.organicmaps.sdk.R.string.today) + ", " + weekdays : null);
     }
 
-    public void setShifts(String[] shifts)
+    public void setShifts(String[] shifts, boolean isToday)
     {
       mShiftsLayout.removeAllViews();
       for (String shift : shifts)
@@ -166,6 +187,7 @@ public class PlaceOpeningHoursAdapter extends RecyclerView.Adapter<PlaceOpeningH
         tv.setText(shift);
         TextViewCompat.setTextAppearance(tv, R.style.MwmTextAppearance_Body3);
         tv.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
+        tv.setTypeface(Typeface.create(tv.getTypeface(), isToday ? Typeface.BOLD : Typeface.NORMAL));
         mShiftsLayout.addView(tv);
       }
     }

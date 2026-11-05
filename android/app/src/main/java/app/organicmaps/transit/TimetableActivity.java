@@ -26,16 +26,20 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import app.organicmaps.sdk.transit.Departure;
+import app.organicmaps.sdk.transit.ImportMode;
+import app.organicmaps.sdk.transit.PackInfo;
 import app.organicmaps.sdk.transit.Stop;
 import app.organicmaps.sdk.transit.rt.RealtimeMerger;
+import app.organicmaps.sdk.transit.rt.RealtimeBoard;
+import app.organicmaps.sdk.transit.rt.RealtimeRequest;
+import app.organicmaps.sdk.transit.rt.GtfsRealtime;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Offline timetable pilot activity: pack import/remove (SAF), manual station search,
@@ -46,9 +50,13 @@ import java.util.concurrent.Executors;
 public class TimetableActivity extends AppCompatActivity
 {
   private static final int REQ_IMPORT_PACK = 47001;
+  private int mNextPickerCode = REQ_IMPORT_PACK;
+  private int mPendingPickerCode;
+  @Nullable private ImportMode mPendingPickerMode;
+  @Nullable private androidx.appcompat.app.AlertDialog mImportChoice;
 
-  /** Livefeed relay on the emulator host (10.0.2.2 = host loopback alias). */
-  private static final String LIVE_RELAY_BASE = "http://10.0.2.2:8099";
+  /** Local-only pilot relay, reached via adb reverse on emulator or USB device. */
+  private static final String LIVE_RELAY_BASE = "http://127.0.0.1:8099";
   private static final String LIVE_REGION = "all";
   /** Matches the board horizon (BOARD_HORIZON_MINUTES = 180). */
   private static final int LIVE_HORIZON_SEC = 3 * 3600;
@@ -103,17 +111,52 @@ public class TimetableActivity extends AppCompatActivity
   private TextView mLiveStatusLine;
   private TextView mStatusLine;
   private TextView mPackLine;
+  private TextView mDatasetLine; // S1 DatasetStatus header, additive to the pack/trust/attribution lines
+  /** Facts of the one registry capture taken at the last resume (presence plus the registered map versions). */
+  private app.organicmaps.sdk.transit.DatasetStatus.MapFacts mMapFacts =
+      app.organicmaps.sdk.transit.DatasetStatus.MapFacts.UNKNOWN;
+  /** Written only by the production datasetMapPresence() inside the current datasetMapFacts() call. */
+  private app.organicmaps.sdk.transit.DatasetStatus.MapFacts mCapturedMapFacts;
+  private TextView mSetupGuide; // UX06 manual setup guide, shown only while S1 has an action to offer
+  private TextView mTrustLine;
   private TextView mAttributionLine;
   private RecyclerView mList;
   private BoardAdapter mAdapter;
   private int mLastBoundRevision = -1;
+  private boolean mWatchingPack;
+  private boolean mHasResumed;
+  @Nullable private PackInfo mExpiryRefreshRequested;
+  private final android.os.Handler mPackHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+  private final Runnable mCheckPackAuthorization = () -> {
+    if (mWatchingPack && mModel != null) {
+      mModel.checkVisible();
+      updatePackTrust(mModel.getState().getValue());
+      renderBoard(mModel.getState().getValue());
+    }
+  };
 
   // -- Opt-in realtime overlay state (main thread only) ----------------------
   private boolean mLiveOn = false;             // default OFF: live = network
   private boolean mNeedLiveFetch = false;      // board reloaded while live on
   private int mLiveGen;                        // discards out-of-order fetches
-  private ExecutorService mLiveExecutor;
-  private final Map<String, RealtimeMerger.DepartureRow> mLiveRows = new HashMap<>();
+  private java.util.concurrent.ThreadPoolExecutor mLiveExecutor;
+  private final Map<Departure, RealtimeMerger.DepartureRow> mLiveRows = new HashMap<>();
+  private GtfsRealtime.FeedMessage mLiveFeed;
+  private List<Departure> mLiveBoardReference;
+  private long mLiveStopId;
+  private String mLivePackIdentity;
+  private RealtimeRequest mLiveTicket;
+  private Future<?> mLiveFuture;
+  private boolean mLiveFetching;
+  private int mLiveSkipped;
+  private final android.os.Handler mLiveHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+  private final Runnable mExpireOverlay = () -> {
+    if (mLiveOn && mModel != null)
+    {
+      renderBoard(mModel.getState().getValue());
+      updateLiveStatusLine();
+    }
+  };
   private int mLiveCoverage;                   // rows with resolvable live data
   private int mLiveBoardCount;                 // board rows at fetch time
   /** Bounded localized failure reason; 0 = none. Never raw endpoint text. */
@@ -125,7 +168,21 @@ public class TimetableActivity extends AppCompatActivity
   protected void onCreate(@Nullable Bundle savedInstanceState)
   {
     super.onCreate(savedInstanceState);
+    if (savedInstanceState != null)
+    {
+      int next = savedInstanceState.getInt("transit.picker_next", REQ_IMPORT_PACK);
+      mNextPickerCode = next >= REQ_IMPORT_PACK && next <= 65535 ? next : 65535;
+      int pending = savedInstanceState.getInt("transit.picker_code", 0);
+      String mode = savedInstanceState.getString("transit.picker_mode");
+      if (pending >= REQ_IMPORT_PACK && pending < mNextPickerCode && mode != null)
+      {
+        try { mPendingPickerMode = ImportMode.valueOf(mode); mPendingPickerCode = pending; }
+        catch (IllegalArgumentException malformed) { /* No fallback mode for an unknown request. */ }
+      }
+    }
     mModel = new ViewModelProvider(this).get(TimetableViewModel.class);
+    if(savedInstanceState!=null)mModel.restoreImportFailure(savedInstanceState.getBoolean("transit.import_failed",false),
+        savedInstanceState.getString("transit.import_failed_database"));
 
     buildContentView();
 
@@ -143,8 +200,9 @@ public class TimetableActivity extends AppCompatActivity
     if (savedInstanceState != null)
       restored = savedInstanceState.getParcelable("transit.saved_state");
     // Restore query text before observing so the field survives rotation/process death.
-    mQuery.setText(mModel.getQueryText());
-    mModel.refreshPackState(restored);
+    mQuery.setText(restored != null ? restored.queryText : mModel.getQueryText());
+    if (restored == null) mModel.refreshPackState(null);
+    else mModel.refreshPackState(restored, savedInstanceState.getString("transit.saved_database"));
 
     mModel.getState().observe(this, this::bind);
     mNearbyBtn.setEnabled(mModel.hasNearbyHint());
@@ -173,14 +231,24 @@ public class TimetableActivity extends AppCompatActivity
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
     // -- Pack header ----------------------------------------------------------
+    // Dynamic text is its accessibility name; a generic description would
+    // replace validity, attribution and failure details for screen readers.
+    mDatasetLine = new TextView(c);
+    mDatasetLine.setId(View.generateViewId());
+    mDatasetLine.setTag("dmaps-dataset-status");
+    mDatasetLine.setVisibility(View.GONE); // shown only once the first pack read has answered
+    root.addView(mDatasetLine); // Text is the accessible name; no colour-only status.
+
     mPackLine = new TextView(c);
     mPackLine.setId(View.generateViewId());
-    mPackLine.setContentDescription(getString(R.string.transit_pack_info));
     root.addView(mPackLine);
+
+    mTrustLine = new TextView(c);
+    mTrustLine.setId(View.generateViewId());
+    root.addView(mTrustLine); // Dynamic text is also the accessibility name.
 
     mAttributionLine = new TextView(c);
     mAttributionLine.setId(View.generateViewId());
-    mAttributionLine.setContentDescription(getString(R.string.transit_attribution));
     mAttributionLine.setTextSize(11f);
     root.addView(mAttributionLine);
 
@@ -201,6 +269,20 @@ public class TimetableActivity extends AppCompatActivity
     root.addView(packRow, new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+    // UX06: a compact manual guide to the existing Download Maps and import chooser. Text only: no control, no intent.
+    mSetupGuide = new TextView(c);
+    mSetupGuide.setId(View.generateViewId());
+    mSetupGuide.setTag("dmaps-setup-guide");
+    mSetupGuide.setTextSize(12f);
+    mSetupGuide.setVisibility(View.GONE);
+    root.addView(mSetupGuide);
+
+    // A separate local screen leaves the board/live-consent and global map router untouched.
+    Button journeys = new Button(c);
+    journeys.setText(R.string.journey_entry);
+    journeys.setOnClickListener(v -> startActivity(new Intent(this, JourneyActivity.class)));
+    root.addView(journeys);
+
     // -- Search ---------------------------------------------------------------
     LinearLayout searchRow = vrow(c);
     mQuery = new EditText(c);
@@ -208,7 +290,6 @@ public class TimetableActivity extends AppCompatActivity
     // Disable personalized keyboard learning for the search field.
     mQuery.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
     mQuery.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
-    mQuery.setContentDescription(getString(R.string.transit_search_hint));
     mQuery.setHint(R.string.transit_search_hint);
     mQuery.setOnEditorActionListener((v, actionId, event) -> {
       if (actionId == EditorInfo.IME_ACTION_SEARCH)
@@ -240,7 +321,6 @@ public class TimetableActivity extends AppCompatActivity
     // -- Status / board -------------------------------------------------------
     mStatusLine = new TextView(c);
     mStatusLine.setId(View.generateViewId());
-    mStatusLine.setContentDescription(getString(R.string.transit_status));
     mStatusLine.setPadding(0, dp(8), 0, dp(8));
     root.addView(mStatusLine);
 
@@ -249,10 +329,8 @@ public class TimetableActivity extends AppCompatActivity
     mRefreshBtn.setText(R.string.transit_refresh);
     mRefreshBtn.setContentDescription(getString(R.string.transit_refresh));
     mRefreshBtn.setOnClickListener(v -> {
-      mModel.refreshBoard();
-      // If live is on, re-join the reloaded board once it arrives in bind().
-      if (mLiveOn)
-        mNeedLiveFetch = true;
+      mNeedLiveFetch = mLiveOn;
+      mModel.refreshBoard(); // only the READY result may trigger the explicit live refresh
     });
     root.addView(mRefreshBtn, new LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -269,7 +347,8 @@ public class TimetableActivity extends AppCompatActivity
     mLiveStatusLine = new TextView(c);
     mLiveStatusLine.setId(View.generateViewId());
     mLiveStatusLine.setTextSize(12f);
-    mLiveStatusLine.setText(R.string.transit_live_off);
+    mLiveStatusLine.setText(RealtimeClient.liveUpdatesAvailable()
+        ? R.string.transit_live_off : R.string.transit_offline_preview);
     root.addView(mLiveStatusLine);
 
     mList = new RecyclerView(c);
@@ -304,18 +383,71 @@ public class TimetableActivity extends AppCompatActivity
     mModel.searchStops(q);
   }
 
+  /** Trusted local wall-clock seam for deterministic host UI tests, not an intent/pack option. */
+  java.time.Instant presentationNow() { return java.time.Instant.now(); }
+
+  /** S1 registry seam, read once per resume on main. Host tests override it; production never reaches native
+   * code unless the real application's core is initialized (see DatasetMapPresence). */
+  app.organicmaps.sdk.transit.DatasetStatus.MapPresence datasetMapPresence()
+  {
+    mCapturedMapFacts = DatasetMapPresence.captureFacts(this); // the only registry read of this resume
+    return mCapturedMapFacts.presence;
+  }
+
+  /** One immutable capture per resume. Reads the presence seam exactly once, so an overriding host test still works. */
+  app.organicmaps.sdk.transit.DatasetStatus.MapFacts datasetMapFacts()
+  {
+    mCapturedMapFacts = null;
+    app.organicmaps.sdk.transit.DatasetStatus.MapPresence presence = datasetMapPresence();
+    app.organicmaps.sdk.transit.DatasetStatus.MapFacts captured = mCapturedMapFacts;
+    mCapturedMapFacts = null;
+    return captured != null && captured.presence == presence
+        ? captured : app.organicmaps.sdk.transit.DatasetStatus.MapFacts.ofPresence(presence);
+  }
+
   private void openPackPicker()
   {
+    TimetableViewModel.ScreenState state = mModel.getState().getValue();
+    if (isFinishing() || isDestroyed() || mPendingPickerMode != null
+        || (state != null && state.status == TimetableViewModel.Status.WORKING)
+        || (mImportChoice != null && mImportChoice.isShowing())) return;
+    if (mNextPickerCode >= 65535)
+    {
+      mStatusLine.setText(R.string.transit_picker_exhausted);
+      return;
+    }
+    mImportChoice = new androidx.appcompat.app.AlertDialog.Builder(this)
+        .setTitle(R.string.transit_import_pack)
+        .setItems(new CharSequence[]{getString(R.string.transit_import_official),
+            getString(R.string.transit_import_untrusted)}, (dialog, which) -> {
+          if (which == 0) launchPackPicker(ImportMode.OFFICIAL_REQUIRED);
+          else if (which == 1) launchPackPicker(ImportMode.USER_UNTRUSTED);
+        }).create();
+    mImportChoice.setOnDismissListener(dialog -> mImportChoice = null);
+    mImportChoice.show();
+  }
+
+  private void launchPackPicker(ImportMode mode)
+  {
+    TimetableViewModel.ScreenState state = mModel.getState().getValue();
+    if (isFinishing() || isDestroyed() || mPendingPickerMode != null
+        || (state != null && state.status == TimetableViewModel.Status.WORKING)
+        || mNextPickerCode >= 65535) return;
+    mPendingPickerMode = mode;
+    mPendingPickerCode = mNextPickerCode++;
+    mImportBtn.setEnabled(false);
     Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
     pick.addCategory(Intent.CATEGORY_OPENABLE);
     pick.setType("*/*");
     // .ctpack is a ZIP; no reliable MIME type, so accept any openable document.
     try
     {
-      startActivityForResult(pick, REQ_IMPORT_PACK);
+      startActivityForResult(pick, mPendingPickerCode);
     }
-    catch (android.content.ActivityNotFoundException e)
+    catch (android.content.ActivityNotFoundException | SecurityException e)
     {
+      mPendingPickerMode = null; mPendingPickerCode = 0;
+      updatePackTrust(mModel.getState().getValue());
       mStatusLine.setText(R.string.transit_error_no_document_picker);
     }
   }
@@ -324,8 +456,11 @@ public class TimetableActivity extends AppCompatActivity
   protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data)
   {
     super.onActivityResult(requestCode, resultCode, data);
-    if (requestCode != REQ_IMPORT_PACK)
+    if (mPendingPickerMode == null || requestCode != mPendingPickerCode)
       return;
+    final ImportMode mode = mPendingPickerMode;
+    mPendingPickerMode = null; mPendingPickerCode = 0;
+    updatePackTrust(mModel.getState().getValue());
     if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null)
       return; // cancelled: previous pack untouched, no error surface
     Uri uri = data.getData();
@@ -334,7 +469,87 @@ public class TimetableActivity extends AppCompatActivity
       grantUriPermission(getPackageName(), uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
     }
     catch (Exception ignored) {}
-    mModel.importPack(uri);
+    mModel.importPack(uri, mode);
+  }
+
+  @Override protected void onSaveInstanceState(@NonNull Bundle state)
+  {
+    state.putInt("transit.picker_next", mNextPickerCode);
+    state.putInt("transit.picker_code", mPendingPickerCode);
+    if (mPendingPickerMode != null) state.putString("transit.picker_mode", mPendingPickerMode.name());
+    if (mModel != null)
+    {
+      state.putParcelable("transit.saved_state", mModel.snapshot());
+      TimetableViewModel.ScreenState current = mModel.getState().getValue();
+      if(current!=null&&current.importFailedFlag()) {
+        state.putBoolean("transit.import_failed",true);
+        if(current.packInfo!=null)state.putString("transit.import_failed_database",current.packInfo.databaseSha256);
+      }
+      if (current != null && current.selectedStop != null && current.packInfo != null)
+        state.putString("transit.saved_database", current.packInfo.databaseSha256);
+    }
+    super.onSaveInstanceState(state);
+  }
+
+  private boolean isQueryable(@Nullable TimetableViewModel.ScreenState state)
+  {
+    if (state == null || !state.packPresent || state.packInfo == null
+        || state.status == TimetableViewModel.Status.ERROR
+        || state.status == TimetableViewModel.Status.WORKING) return false;
+    PackInfo info = state.packInfo;
+    java.time.Instant now=presentationNow();
+    return !info.isExpired(now)&&!info.isNotYetValid(now)&&(!info.authenticated || (info.authorizationExpires != null
+        && now.isBefore(info.authorizationExpires)));
+  }
+
+  private void updatePackTrust(@Nullable TimetableViewModel.ScreenState state)
+  {
+    mPackHandler.removeCallbacks(mCheckPackAuthorization);
+    if (state == null) return;
+    app.organicmaps.sdk.transit.DatasetStatus dataset =
+        DatasetStatusText.forTimetableWithMap(state, presentationNow(), mMapFacts);
+    DatasetStatusText.render(mDatasetLine, dataset);
+    DatasetStatusText.renderGuide(mSetupGuide, dataset);
+    boolean busy = state.status == TimetableViewModel.Status.WORKING;
+    boolean queryable = isQueryable(state);
+    mImportBtn.setEnabled(!busy && mPendingPickerMode == null);
+    mRemoveBtn.setEnabled(state.packPresent && !busy);
+    mSearchBtn.setEnabled(queryable); mQuery.setEnabled(queryable);
+    mNearbyBtn.setEnabled(queryable && mModel.hasNearbyHint());
+    mRefreshBtn.setEnabled(queryable);
+    mLiveToggle.setEnabled(queryable && RealtimeClient.liveUpdatesAvailable());
+    PackInfo info = state.packInfo;
+    if (info == null)
+    {
+      mTrustLine.setText(state.status == TimetableViewModel.Status.ERROR
+          ? getString(R.string.transit_pack_unavailable) : null);
+      mExpiryRefreshRequested = null;
+      return;
+    }
+    if(mWatchingPack)mPackHandler.postDelayed(mCheckPackAuthorization,1000L);
+    if (!info.authenticated)
+    {
+      mTrustLine.setText(R.string.transit_unsigned_pack_disclosure);
+      mExpiryRefreshRequested = null;
+      return;
+    }
+    java.time.Instant now = presentationNow();
+    if (info.authorizationExpires == null || !now.isBefore(info.authorizationExpires))
+    {
+      mTrustLine.setText(R.string.transit_authorization_expired);
+      invalidateLiveContext();
+      mAdapter.submit(new ArrayList<>());
+      if (mWatchingPack && !busy && mExpiryRefreshRequested != info)
+      {
+        mExpiryRefreshRequested = info;
+        mModel.refreshPackState(null); // Reverify below UI; never switch to USER_UNTRUSTED.
+      }
+      return;
+    }
+    mExpiryRefreshRequested = null;
+    mTrustLine.setText(getString(R.string.transit_authenticated_pack, info.signingKeyId,
+        info.officialSequence, info.authorizationExpires.toString()));
+
   }
 
   private void bind(TimetableViewModel.ScreenState s)
@@ -342,13 +557,23 @@ public class TimetableActivity extends AppCompatActivity
     if (s == null || s.revision == mLastBoundRevision)
       return;
     mLastBoundRevision = s.revision;
+    if (!RealtimeClient.liveUpdatesAvailable())
+    {
+      mLiveOn = false; mNeedLiveFetch = false;
+      invalidateLiveContext();
+    }
+    long selectedId = s.selectedStop != null ? s.selectedStop.id : 0L;
+    String pack = s.packInfo != null ? s.packInfo.databaseSha256 : null;
+    if (s.status == TimetableViewModel.Status.WORKING || s.board != mLiveBoardReference
+        || selectedId != mLiveStopId || !java.util.Objects.equals(pack, mLivePackIdentity))
+      invalidateLiveContext();
+    mLiveBoardReference = s.board;
+    mLiveStopId = selectedId;
+    mLivePackIdentity = pack;
 
     // Buttons
     boolean ready = s.packPresent;
-    mRemoveBtn.setEnabled(ready);
-    mSearchBtn.setEnabled(ready);
-    mQuery.setEnabled(ready);
-    mNearbyBtn.setEnabled(ready && mModel.hasNearbyHint());
+    updatePackTrust(s);
 
     // Pack line: publisher, validity window in agency timezone, disclosure.
     if (s.packInfo != null)
@@ -356,12 +581,12 @@ public class TimetableActivity extends AppCompatActivity
       StringBuilder sb = new StringBuilder();
       sb.append(getString(R.string.transit_pack_line,
           s.packInfo.publisher, s.packInfo.validFrom, s.packInfo.validUntil));
-      java.time.Instant now = java.time.Instant.now();
+      java.time.Instant now = presentationNow();
       if (s.packInfo.isExpired(now))
         sb.append("\n").append(getString(R.string.transit_pack_expired));
       else if (s.packInfo.isNotYetValid(now))
         sb.append("\n").append(getString(R.string.transit_pack_not_yet_valid));
-      sb.append("\n").append(getString(R.string.transit_unsigned_pack_disclosure));
+
       mPackLine.setText(sb.toString());
       // Attribution + license + source + service window.
       mAttributionLine.setText(getString(R.string.transit_attribution_line,
@@ -370,7 +595,9 @@ public class TimetableActivity extends AppCompatActivity
     }
     else
     {
-      mPackLine.setText(ready ? null : getString(R.string.transit_no_pack));
+      mPackLine.setText(s.status == TimetableViewModel.Status.ERROR
+          ? getString(R.string.transit_error_generic)
+          : ready ? null : getString(R.string.transit_no_pack));
       mAttributionLine.setText(null);
     }
 
@@ -386,28 +613,25 @@ public class TimetableActivity extends AppCompatActivity
             : getString(R.string.transit_no_results);
         break;
       case ERROR:
-        msg = getString(R.string.transit_error_generic);
+        msg = s.message != null ? s.message : getString(R.string.transit_error_generic);
         break;
       default: break;
     }
-    if (s.importFailedFlag())
+    if (s.importFailedFlag() && s.status != TimetableViewModel.Status.ERROR)
       msg = getString(R.string.transit_import_failed);
     mStatusLine.setText(msg);
 
     // Board / candidates list
     mRefreshBtn.setVisibility(s.selectedStop != null ? View.VISIBLE : View.GONE);
-    mLiveToggle.setVisibility(s.selectedStop != null ? View.VISIBLE : View.GONE);
+    mLiveToggle.setVisibility(RealtimeClient.liveUpdatesAvailable() && s.selectedStop != null
+        ? View.VISIBLE : View.GONE);
     mLiveStatusLine.setVisibility(s.selectedStop != null ? View.VISIBLE : View.GONE);
-    mAdapter.setShowBoard(s.selectedStop != null);
-    List<Object> rows = new ArrayList<>();
-    if (s.selectedStop != null)
-      rows.addAll(s.board);
-    else
-      rows.addAll(filterBoardingCandidates(s.candidates));
-    mAdapter.submit(rows);
+    renderBoard(s);
+    updateLiveStatusLine();
 
     // A board arrived while live was on (toggle or explicit refresh): join it once.
-    if (mNeedLiveFetch && s.selectedStop != null && !s.board.isEmpty())
+    if (isQueryable(s) && mLiveOn && mNeedLiveFetch && s.status == TimetableViewModel.Status.READY
+        && s.selectedStop != null && !s.board.isEmpty())
     {
       mNeedLiveFetch = false;
       fetchLive(s.board);
@@ -418,138 +642,225 @@ public class TimetableActivity extends AppCompatActivity
   // Opt-in realtime overlay: one fetch per toggle/refresh, no polling loop.
   // ---------------------------------------------------------------------
   @MainThread
-  private void onLiveToggle()
+  private void cancelLiveWork()
   {
-    mLiveOn = !mLiveOn;
-    if (mLiveOn)
-    {
-      TimetableViewModel.ScreenState s = mModel.getState().getValue();
-      if (s != null && s.selectedStop != null && !s.board.isEmpty())
-        fetchLive(s.board);
-      else
-        updateLiveStatusLine();
-      return;
-    }
-    // OFF: live claims must vanish immediately; rows fall back to scheduled.
-    mLiveGen++; // discard any in-flight fetch result
-    mNeedLiveFetch = false;
-    mLiveRows.clear();
-    mLiveCoverage = 0;
-    mLiveBoardCount = 0;
-    mLiveErrorRes = 0;
-    mLiveEtag = null;
-    updateLiveStatusLine();
-    mAdapter.notifyDataSetChanged();
+    if (mLiveTicket != null) mLiveTicket.cancel();
+    if (mLiveFuture != null) mLiveFuture.cancel(true);
+    if (mLiveExecutor != null) mLiveExecutor.purge();
+    mLiveTicket = null;
+    mLiveFuture = null;
+    mLiveFetching = false;
+    mLiveGen++;
   }
 
-  /** Fetches the relay slice on a background thread and merges it onto the board. */
+  @MainThread
+  private void invalidateLiveContext()
+  {
+    cancelLiveWork();
+    mLiveFeed = null;
+    mLiveEtag = null;
+    mLiveErrorRes = 0;
+    mLiveRows.clear();
+    mLiveCoverage = 0;
+    mLiveSkipped = 0;
+    mLiveHandler.removeCallbacks(mExpireOverlay);
+  }
+
+  /** A pure projection controls BOTH adapter membership and each occurrence's live label. */
+  @MainThread
+  private void renderBoard(@Nullable TimetableViewModel.ScreenState s)
+  {
+    if (s == null) return;
+    if (!isQueryable(s))
+    {
+      invalidateLiveContext();
+      mAdapter.submit(new ArrayList<>());
+      return;
+    }
+    mLiveHandler.removeCallbacks(mExpireOverlay);
+    mAdapter.setShowBoard(s.selectedStop != null);
+    mLiveRows.clear();
+    List<Object> items = new ArrayList<>();
+    if (s.selectedStop != null)
+    {
+      long now = System.currentTimeMillis() / 1000L;
+      RealtimeBoard.Projection projection = RealtimeBoard.project(s.board,
+          RealtimeClient.liveUpdatesAvailable() && mLiveOn ? mLiveFeed : null, now);
+      items.addAll(projection.departures);
+      mLiveRows.putAll(projection.rows);
+      mLiveCoverage = projection.coverage;
+      mLiveSkipped = projection.skipped;
+      mLiveBoardCount = projection.departures.size();
+      if (mLiveOn && projection.nextExpiryEpochSecond != null)
+      {
+        // One local expiry invalidation; never a fetch or a network polling loop.
+        long delay = Math.max(1L, projection.nextExpiryEpochSecond * 1000L - System.currentTimeMillis());
+        mLiveHandler.postDelayed(mExpireOverlay, delay);
+      }
+    }
+    else
+    {
+      items.addAll(filterBoardingCandidates(s.candidates));
+      mLiveCoverage = 0;
+      mLiveBoardCount = 0;
+      mLiveSkipped = 0;
+    }
+    mAdapter.submit(items);
+  }
+
+  @MainThread
+  private void onLiveToggle()
+  {
+    TimetableViewModel.ScreenState s = mModel.getState().getValue();
+    if (!RealtimeClient.liveUpdatesAvailable() || !isQueryable(s))
+    {
+      mLiveOn = false; mNeedLiveFetch = false;
+      invalidateLiveContext(); renderBoard(s); updateLiveStatusLine();
+      return;
+    }
+    mLiveOn = !mLiveOn;
+    if (!mLiveOn)
+    {
+      mNeedLiveFetch = false;
+      invalidateLiveContext();
+      renderBoard(s); // restores skipped scheduled occurrences as well as labels
+      updateLiveStatusLine();
+      return;
+    }
+    renderBoard(s);
+    if (s != null && s.status == TimetableViewModel.Status.READY
+        && s.selectedStop != null && !s.board.isEmpty())
+      fetchLive(s.board);
+    else
+    {
+      mNeedLiveFetch = true; // explicit opt-in may wait for the local board, not use an old one
+      updateLiveStatusLine();
+    }
+  }
+
   @MainThread
   private void fetchLive(@NonNull List<Departure> board)
   {
-    final List<RealtimeMerger.ScheduledRow> scheduled = new ArrayList<>(board.size());
-    final java.util.HashSet<String> tripIds = new java.util.HashSet<>();
-    for (Departure d : board)
-    {
-      if (d.tripSourceId == null)
-        continue;
-      tripIds.add(d.tripSourceId);
-      scheduled.add(new RealtimeMerger.ScheduledRow(d.tripSourceId, d.line, d.destination,
-          d.platform, d.when.getEpochSecond(), d.stopSourceId));
-    }
-    if (tripIds.isEmpty())
-      return;
+    if (!RealtimeClient.liveUpdatesAvailable() || !mLiveOn || board.isEmpty()
+        || !isQueryable(mModel.getState().getValue())) return;
+    cancelLiveWork(); // coalesce rapid refreshes, revoke active/pending transport tickets
     if (mLiveExecutor == null)
-    {
-      mLiveExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "timetable-live-fetch");
-        t.setDaemon(true);
-        return t;
+      mLiveExecutor = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0L,
+          java.util.concurrent.TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(1), r -> {
+        Thread thread = new Thread(r, "timetable-live-fetch");
+        thread.setDaemon(true);
+        return thread;
       });
-    }
-    final int gen = ++mLiveGen;
-    final int boardCount = board.size();
-    final String etag = mLiveEtag;
+    final int generation = mLiveGen;
+    final RealtimeRequest ticket = new RealtimeRequest();
+    mLiveTicket = ticket;
+    final java.util.Set<String> tripIds = RealtimeClient.tripIdsOf(board);
+    final String etag = mLiveFeed != null ? mLiveEtag : null;
     mLiveErrorRes = 0;
-    mLiveStatusLine.setText(R.string.transit_working);
-    mLiveExecutor.execute(() -> {
-      RealtimeClient.Result res = RealtimeClient.fetchAndJoin(
-          LIVE_RELAY_BASE, LIVE_REGION, LIVE_HORIZON_SEC, tripIds, etag);
-      List<RealtimeMerger.DepartureRow> merged = null;
-      if (res.ok() && !res.notModified)
-      {
-        merged = RealtimeMerger.mergeBoard(scheduled, res.joined, res.feedTimestamp,
-            System.currentTimeMillis() / 1000L,
-            RealtimeMerger.DEFAULT_DELAY_THRESHOLD_SECONDS,
-            RealtimeMerger.DEFAULT_STALE_AFTER_SECONDS);
-      }
-      final List<RealtimeMerger.DepartureRow> rows = merged;
-      final boolean unchanged = res.notModified;
-      final String newEtag = res.etag;
-      new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-        if (!mLiveOn || gen != mLiveGen)
-          return; // toggled off or superseded while fetching
-        mLiveEtag = newEtag;
-        if (unchanged)
+    mLiveFetching = true;
+    updateLiveStatusLine();
+    mLiveFuture = mLiveExecutor.submit(() -> {
+      if (!RealtimeClient.liveUpdatesAvailable() || ticket.isCanceled()) return;
+      RealtimeClient.Result result = RealtimeClient.fetchAndJoin(
+          LIVE_RELAY_BASE, LIVE_REGION, LIVE_HORIZON_SEC, tripIds, etag, ticket);
+      mLiveHandler.post(() -> {
+        TimetableViewModel.ScreenState current = mModel.getState().getValue();
+        if (!RealtimeClient.liveUpdatesAvailable() || ticket.isCanceled() || !mLiveOn
+            || generation != mLiveGen || isDestroyed()
+            || current == null || current.status != TimetableViewModel.Status.READY
+            || current.board != board)
+          return; // old board/pack/consent cannot publish into the current screen
+        mLiveFetching = false;
+        if (!result.ok())
         {
-          // 304: the slice did not change, so the rows already held are still
-          // correct. Not the same as "the relay had nothing".
-          updateLiveStatusLine();
-          return;
+          mLiveFeed = null;
+          mLiveEtag = null;
+          mLiveErrorRes = result.errorRes;
         }
-        mLiveRows.clear();
-        mLiveCoverage = 0;
-        mLiveBoardCount = boardCount;
-        if (rows != null)
+        else if (result.notModified)
         {
-          for (RealtimeMerger.DepartureRow row : rows)
-          {
-            mLiveRows.put(row.tripSourceId, row);
-            if (row.hasLiveData())
-              mLiveCoverage++;
-          }
-          mLiveErrorRes = 0;
+          if (mLiveFeed == null) mLiveErrorRes = R.string.transit_live_reason_bad_feed;
+          // Retain the RAW snapshot, then reproject age/occurrences with the current clock.
         }
         else
         {
-          mLiveErrorRes = res.errorRes;
+          mLiveFeed = result.feed;
+          mLiveEtag = result.etag;
+          mLiveErrorRes = 0;
         }
+        renderBoard(current);
         updateLiveStatusLine();
-        mAdapter.notifyDataSetChanged();
       });
     });
   }
 
-  /** Coverage / freshness / error line for the live overlay. */
   @MainThread
   private void updateLiveStatusLine()
   {
-    if (!mLiveOn)
-    {
+    if (!RealtimeClient.liveUpdatesAvailable())
+      mLiveStatusLine.setText(R.string.transit_offline_preview);
+    else if (!mLiveOn)
       mLiveStatusLine.setText(R.string.transit_live_off);
-      return;
-    }
-    if (mLiveErrorRes != 0)
+    else if (mLiveFetching)
+      mLiveStatusLine.setText(R.string.transit_working);
+    else if (mLiveErrorRes != 0)
+      mLiveStatusLine.setText(getString(R.string.transit_live_error, getString(mLiveErrorRes)));
+    else
     {
-      // A fixed localized reason; never the endpoint's own text on screen.
-      mLiveStatusLine.setText(
-          getString(R.string.transit_live_error, getString(mLiveErrorRes)));
-      return;
+      String status = getString(R.string.transit_live_coverage, mLiveCoverage, mLiveBoardCount)
+          + "  ·  " + getString(R.string.transit_live_region_all);
+      if (mLiveSkipped > 0)
+        status += "  ·  " + getString(R.string.transit_live_skipped_count, mLiveSkipped);
+      mLiveStatusLine.setText(status);
     }
-    if (mLiveRows.isEmpty())
-      return; // fetch in flight or nothing to show yet
-    mLiveStatusLine.setText(getString(R.string.transit_live_coverage,
-        mLiveCoverage, mLiveBoardCount) + "  ·  "
-        + getString(R.string.transit_live_region_all));
   }
 
-  @Override
-  protected void onDestroy()
+  @Override protected void onResume()
   {
-    if (mLiveExecutor != null)
-    {
-      mLiveExecutor.shutdownNow();
-      mLiveExecutor = null;
+    super.onResume();
+    // Do not supersede onCreate's identity-bound restore or an in-flight picker/import. Later
+    // resumes revalidate the local pack before old candidate/board controls become usable.
+    if(mHasResumed&&mModel!=null&&mPendingPickerMode==null) {
+      TimetableViewModel.ScreenState current=mModel.getState().getValue();
+      if(current!=null&&current.status!=TimetableViewModel.Status.WORKING)mModel.refreshPackState(null);
     }
+    mHasResumed=true;
+    // A resumed LiveData observer may see the same revision, so bind() need not run.
+    // Preview must revoke stale consent/cache independently of new board publication.
+    if (!RealtimeClient.liveUpdatesAvailable())
+    {
+      mLiveOn = false; mNeedLiveFetch = false;
+      invalidateLiveContext();
+    }
+    mWatchingPack = true;
+    mMapFacts = datasetMapFacts();
+    if (mModel != null)
+    {
+      updatePackTrust(mModel.getState().getValue());
+      renderBoard(mModel.getState().getValue());
+      updateLiveStatusLine(); // ages cached evidence; does not fetch on resume
+    }
+  }
+
+  @Override protected void onStop()
+  {
+    mWatchingPack = false;
+    mPackHandler.removeCallbacks(mCheckPackAuthorization);
+    mNeedLiveFetch = false;
+    cancelLiveWork();
+    mLiveHandler.removeCallbacks(mExpireOverlay);
+    super.onStop();
+  }
+
+  @Override protected void onDestroy()
+  {
+    mWatchingPack = false;
+    mPackHandler.removeCallbacks(mCheckPackAuthorization);
+    if (mImportChoice != null) mImportChoice.dismiss();
+    mLiveOn = false;
+    mNeedLiveFetch = false;
+    invalidateLiveContext();
+    if (mLiveExecutor != null) mLiveExecutor.shutdownNow();
     super.onDestroy();
   }
 
@@ -659,7 +970,7 @@ public class TimetableActivity extends AppCompatActivity
     private String liveDescription(Departure d)
     {
       RealtimeMerger.DepartureRow live =
-          d.tripSourceId == null ? null : mLiveRows.get(d.tripSourceId);
+          mLiveRows.get(d);
       if (live == null || !live.hasLiveData())
         return getString(R.string.transit_live_spoken_scheduled);
       final String base;
@@ -696,7 +1007,7 @@ public class TimetableActivity extends AppCompatActivity
         sb.append("  · ").append(getString(R.string.transit_approximate_time));
       // Key invariant: absent live data is NEVER rendered as live or cancelled.
       RealtimeMerger.DepartureRow live =
-          d.tripSourceId == null ? null : mLiveRows.get(d.tripSourceId);
+          mLiveRows.get(d);
       if (live != null && live.hasLiveData())
       {
         switch (live.state)
@@ -732,11 +1043,16 @@ public class TimetableActivity extends AppCompatActivity
       StringBuilder sb = new StringBuilder(st.name);
       if (st.platform != null && !st.platform.isEmpty())
         sb.append(" — ").append(getString(R.string.transit_platform, st.platform));
+      else if (st.locationType == 0)
+        sb.append(" — ").append(getString(R.string.journey_platform_unknown));
       if (st.locationType == 1)
         sb.append("  (").append(getString(R.string.transit_station)).append(')');
       if (!Double.isNaN(st.distanceMetres))
         sb.append("  ·  ").append(String.format(Locale.getDefault(), "%.0f m", st.distanceMetres));
-      return sb.toString();
+      // Names and even supplied platform labels can collide; retain the exact
+      // source identity, just as the journey platform chooser does. Never infer
+      // a platform number or direction from an opaque source-ID suffix.
+      return getString(R.string.journey_platform_choice, sb.toString(), st.sourceId);
     }
   }
 }

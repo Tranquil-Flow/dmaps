@@ -1,59 +1,25 @@
 package app.organicmaps.sdk.transit.rt;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-/**
- * GTFS-RT FeedMessage parsing — TripUpdates subset.
- *
- * Parses only what a departure board needs: trip identity, per-stop arrival and
- * departure times, delays and cancellation state. VehiclePositions and alerts
- * are counted, not decoded — a board showing scheduled-vs-live does not need
- * them, and decoding less keeps the trust boundary small.
- *
- * Field numbers follow the published gtfs-realtime.proto. Structural
- * counterpart of timetable_rt/gtfsrt.py.
- */
+/** Bounded FULL_DATASET GTFS-RT TripUpdates parser. Unknown fields are skipped, not guessed. */
 public final class GtfsRealtime
 {
   private GtfsRealtime() {}
 
-  // --- gtfs-realtime.proto field numbers ---
-  static final int FEEDHEADER_TIMESTAMP = 3;
-  static final int FEEDENTITY_ID = 1;
-  static final int FEEDENTITY_IS_DELETED = 2;
-  static final int FEEDENTITY_TRIP_UPDATE = 3;
-  static final int FEEDENTITY_VEHICLE = 4;
-  static final int FEEDENTITY_ALERT = 5;
-  static final int TRIPUPDATE_TRIP = 1;
-  static final int TRIPUPDATE_STOP_TIME_UPDATE = 2;
-  static final int TRIPUPDATE_TIMESTAMP = 3;
-  static final int TRIPUPDATE_DELAY = 4;
-  static final int TRIPDESC_TRIP_ID = 1;
-  static final int TRIPDESC_START_DATE = 3;
-  static final int TRIPDESC_SCHEDULE_RELATIONSHIP = 4;
-  static final int TRIPDESC_ROUTE_ID = 5;
-  static final int TRIPDESC_DIRECTION_ID = 6;
-  static final int STU_ARRIVAL = 2;
-  static final int STU_DEPARTURE = 3;
-  static final int STU_STOP_ID = 4;
-  static final int STU_SCHEDULE_RELATIONSHIP = 5;
-  static final int STE_DELAY = 1;
-  static final int STE_TIME = 2;
-
+  // Canonical google/transit schema: TripUpdate vehicle=3, timestamp=4, delay=5.
   static final int TRIP_CANCELED = 3;
   static final int STOP_SKIPPED = 1;
-
-  /** Refuse feeds claiming implausibly many entities before materialising them. */
+  static final int STOP_NO_DATA = 2;
   public static final int MAX_ENTITIES = 200_000;
-
-  /** Beyond this a delay cannot describe lateness. See RealtimeMerger. */
+  public static final int MAX_STOP_UPDATES_PER_TRIP = 20_000;
   public static final long MAX_PLAUSIBLE_DELAY_SECONDS = 24L * 3600L;
 
   public static final class StopTimeEvent
   {
-    public final Long time;          // absolute epoch seconds, or null
-    public final Long delay;         // seconds vs schedule, or null
+    public final Long time, delay;
     StopTimeEvent(Long time, Long delay) { this.time = time; this.delay = delay; }
   }
 
@@ -61,48 +27,50 @@ public final class GtfsRealtime
   {
     public final String stopId;
     public final Integer stopSequence;
-    public final StopTimeEvent arrival;
-    public final StopTimeEvent departure;
+    public final StopTimeEvent arrival, departure;
     public final int scheduleRelationship;
-
+    /** Pilot cannot yet display changed platform/pickup/headsign properties honestly. */
+    public final boolean hasUnsupportedStopProperties;
     StopTimeUpdate(String stopId, Integer stopSequence, StopTimeEvent arrival,
                    StopTimeEvent departure, int scheduleRelationship)
+    { this(stopId, stopSequence, arrival, departure, scheduleRelationship, false); }
+    StopTimeUpdate(String stopId, Integer stopSequence, StopTimeEvent arrival,
+                   StopTimeEvent departure, int scheduleRelationship, boolean unsupportedProperties)
     {
+      this.hasUnsupportedStopProperties = unsupportedProperties;
       this.stopId = stopId;
       this.stopSequence = stopSequence;
       this.arrival = arrival;
       this.departure = departure;
       this.scheduleRelationship = scheduleRelationship;
     }
-
     public boolean isSkipped() { return scheduleRelationship == STOP_SKIPPED; }
   }
 
   public static final class TripUpdate
   {
-    public final String tripId;
-    public final String routeId;
+    public final String tripId, routeId, startDate, startTime;
     public final Integer directionId;
-    public final String startDate;
     public final int scheduleRelationship;
-    public final Long delay;
-    public final Long timestamp;
+    public final Long delay, timestamp;
     public final List<StopTimeUpdate> stopTimeUpdates;
-
-    TripUpdate(String tripId, String routeId, Integer directionId,
-               String startDate, int scheduleRelationship, Long delay,
-               Long timestamp, List<StopTimeUpdate> stopTimeUpdates)
+    TripUpdate(String tripId, String routeId, Integer directionId, String startDate,
+               int relationship, Long delay, Long timestamp, List<StopTimeUpdate> stops)
+    { this(tripId, routeId, directionId, startDate, null, relationship, delay, timestamp, stops); }
+    TripUpdate(String tripId, String routeId, Integer directionId, String startDate,
+               String startTime, int relationship, Long delay, Long timestamp,
+               List<StopTimeUpdate> stops)
     {
       this.tripId = tripId;
       this.routeId = routeId;
       this.directionId = directionId;
       this.startDate = startDate;
-      this.scheduleRelationship = scheduleRelationship;
+      this.startTime = startTime;
+      this.scheduleRelationship = relationship;
       this.delay = delay;
       this.timestamp = timestamp;
-      this.stopTimeUpdates = stopTimeUpdates;
+      this.stopTimeUpdates = Collections.unmodifiableList(new ArrayList<>(stops));
     }
-
     public boolean isCanceled() { return scheduleRelationship == TRIP_CANCELED; }
   }
 
@@ -110,204 +78,210 @@ public final class GtfsRealtime
   {
     public final Long timestamp;
     public final List<TripUpdate> tripUpdates;
-    public final int vehicleEntities;
-    public final int alertEntities;
-
-    FeedMessage(Long timestamp, List<TripUpdate> tripUpdates,
-                int vehicleEntities, int alertEntities)
+    public final int vehicleEntities, alertEntities;
+    FeedMessage(Long timestamp, List<TripUpdate> updates, int vehicles, int alerts)
     {
       this.timestamp = timestamp;
-      this.tripUpdates = tripUpdates;
-      this.vehicleEntities = vehicleEntities;
-      this.alertEntities = alertEntities;
+      this.tripUpdates = Collections.unmodifiableList(new ArrayList<>(updates));
+      this.vehicleEntities = vehicles;
+      this.alertEntities = alerts;
     }
   }
 
-  /**
-   * Parses a complete FeedMessage. Throws WireException on malformed input.
-   *
-   * A header is mandatory. A zero-length or headerless body throws rather than
-   * yielding an empty feed, because "no updates" and "no response" must never
-   * look alike to the caller — conflating them turns a failed fetch into a
-   * false claim that a service is running normally.
-   */
+  /** Retain complete updates only for local board trip IDs; do not collapse instances. */
+  public static FeedMessage forTripIds(FeedMessage feed, java.util.Set<String> ids)
+  {
+    List<TripUpdate> updates = new ArrayList<>();
+    for (TripUpdate update : feed.tripUpdates)
+      if (update.tripId != null && ids.contains(update.tripId)) updates.add(update);
+    return new FeedMessage(feed.timestamp, updates, 0, 0);
+  }
+
+  private static void wire(WireReader.OutInt actual, int expected)
+  {
+    if (actual.value != expected) throw new WireReader.WireException("wrong wire type for known field");
+  }
+  private static byte[] bytes(WireReader r, WireReader.OutInt wt)
+  { wire(wt, WireReader.LEN); return r.readBytes(); }
+  private static String text(WireReader r, WireReader.OutInt wt)
+  {
+    byte[] raw = bytes(r, wt);
+    if (raw.length > 2048) throw new WireReader.WireException("identifier exceeds bound");
+    return WireReader.utf8(raw);
+  }
+  private static long number(WireReader r, WireReader.OutInt wt)
+  { wire(wt, WireReader.VARINT); return r.readVarint(); }
+  private static long nonnegative(WireReader r, WireReader.OutInt wt)
+  {
+    long value = number(r, wt);
+    if (value < 0) throw new WireReader.WireException("unsigned value exceeds supported range");
+    return value;
+  }
+  private static int small(WireReader r, WireReader.OutInt wt)
+  {
+    long value = nonnegative(r, wt);
+    if (value > Integer.MAX_VALUE) throw new WireReader.WireException("integer exceeds supported range");
+    return (int) value;
+  }
+  private static long delay(WireReader r, WireReader.OutInt wt)
+  {
+    long value = number(r, wt);
+    if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE)
+      throw new WireReader.WireException("delay exceeds int32 range");
+    return value;
+  }
+
+  /** No partial result is published for malformed input or unsupported differential feeds. */
   public static FeedMessage parse(byte[] raw)
   {
-    if (raw == null || raw.length == 0)
-      throw new WireReader.WireException("empty feed payload");
-
-    Long timestamp = null;
-    boolean sawHeader = false;
-    List<TripUpdate> updates = new ArrayList<>();
-    int vehicles = 0, alerts = 0, entityCount = 0;
-
+    if (raw == null || raw.length == 0) throw new WireReader.WireException("empty feed payload");
     WireReader r = new WireReader(raw);
     WireReader.OutInt wt = new WireReader.OutInt();
+    Long timestamp = null;
+    boolean header = false;
+    int entities = 0, vehicles = 0, alerts = 0;
+    List<TripUpdate> updates = new ArrayList<>();
     while (r.hasRemaining())
     {
-      int field = r.readTag(wt);
-      if (field == 1)
+      int f = r.readTag(wt);
+      if (f == 1)
       {
-        sawHeader = true;
-        byte[] hdr = r.readBytes();
-        WireReader h = new WireReader(hdr);
+        if (header) throw new WireReader.WireException("duplicate feed header");
+        header = true;
+        WireReader h = new WireReader(bytes(r, wt));
+        String version = null;
         while (h.hasRemaining())
         {
           int hf = h.readTag(wt);
-          if (hf == FEEDHEADER_TIMESTAMP)
-            timestamp = h.readVarint();
-          else
-            h.skip(wt.value);
+          if (hf == 1) version = text(h, wt);
+          else if (hf == 2)
+          {
+            if (small(h, wt) != 0) throw new WireReader.WireException("differential feed unsupported");
+          }
+          else if (hf == 3) timestamp = nonnegative(h, wt);
+          else h.skip(wt.value);
+        }
+        if (!"1.0".equals(version) && !"2.0".equals(version))
+          throw new WireReader.WireException("missing or unsupported feed version");
+      }
+      else if (f == 2)
+      {
+        if (++entities > MAX_ENTITIES) throw new WireReader.WireException("too many feed entities");
+        WireReader e = new WireReader(bytes(r, wt));
+        String id = null;
+        boolean deleted = false, vehicle = false, alert = false;
+        TripUpdate update = null;
+        while (e.hasRemaining())
+        {
+          int ef = e.readTag(wt);
+          if (ef == 1) id = text(e, wt);
+          else if (ef == 2)
+          {
+            int value = small(e, wt);
+            if (value > 1) throw new WireReader.WireException("invalid deletion flag");
+            deleted = value == 1;
+          }
+          else if (ef == 3) update = parseTrip(bytes(e, wt));
+          else if (ef == 4) { bytes(e, wt); vehicle = true; }
+          else if (ef == 5) { bytes(e, wt); alert = true; }
+          else e.skip(wt.value);
+        }
+        if (id == null || id.isEmpty()) throw new WireReader.WireException("entity missing id");
+        if (!deleted)
+        {
+          if (update != null) updates.add(update);
+          else if (vehicle) vehicles++;
+          else if (alert) alerts++;
         }
       }
-      else if (field == 2)
-      {
-        if (++entityCount > MAX_ENTITIES)
-          throw new WireReader.WireException(
-              "feed claims more than " + MAX_ENTITIES + " entities; refusing");
-        byte[] ent = r.readBytes();
-        TripUpdate u = parseEntity(ent, wt);
-        if (u != null)
-          updates.add(u);
-        else if (entityHas(ent, FEEDENTITY_VEHICLE))
-          vehicles++;
-        else if (entityHas(ent, FEEDENTITY_ALERT))
-          alerts++;
-      }
-      else
-      {
-        r.skip(wt.value);
-      }
+      else r.skip(wt.value);
     }
-
-    if (!sawHeader)
-      throw new WireReader.WireException(
-          "feed has no header; refusing to treat a headerless payload as empty");
-
+    if (!header) throw new WireReader.WireException("feed has no header");
     return new FeedMessage(timestamp, updates, vehicles, alerts);
   }
 
-  private static boolean entityHas(byte[] ent, int wantField)
+  private static TripUpdate parseTrip(byte[] raw)
   {
-    WireReader r = new WireReader(ent);
+    WireReader r = new WireReader(raw);
     WireReader.OutInt wt = new WireReader.OutInt();
-    while (r.hasRemaining())
-      if (r.readTag(wt) == wantField)
-        return true;
-      else
-        r.skip(wt.value);
-    return false;
-  }
-
-  private static TripUpdate parseEntity(byte[] ent, WireReader.OutInt wt)
-  {
-    WireReader r = new WireReader(ent);
-    while (r.hasRemaining())
-    {
-      int f = r.readTag(wt);
-      if (f == FEEDENTITY_TRIP_UPDATE)
-        return parseTripUpdate(r.readBytes(), wt);
-      r.skip(wt.value);
-    }
-    return null;
-  }
-
-  private static TripUpdate parseTripUpdate(byte[] raw, WireReader.OutInt wt)
-  {
-    String tripId = null, routeId = null, startDate = null;
-    Integer directionId = null;
+    String trip = null, route = null, date = null, start = null;
+    Integer direction = null;
     int relationship = 0;
+    boolean descriptor = false;
     Long delay = null, timestamp = null;
     List<StopTimeUpdate> stops = new ArrayList<>();
-
-    WireReader r = new WireReader(raw);
     while (r.hasRemaining())
     {
       int f = r.readTag(wt);
-      if (f == TRIPUPDATE_TRIP)
+      if (f == 1)
       {
-        WireReader t = new WireReader(r.readBytes());
+        descriptor = true;
+        WireReader t = new WireReader(bytes(r, wt));
         while (t.hasRemaining())
         {
           int tf = t.readTag(wt);
-          if (tf == TRIPDESC_TRIP_ID)
-            tripId = WireReader.utf8(t.readBytes());
-          else if (tf == TRIPDESC_ROUTE_ID)
-            routeId = WireReader.utf8(t.readBytes());
-          else if (tf == TRIPDESC_START_DATE)
-            startDate = WireReader.utf8(t.readBytes());
-          else if (tf == TRIPDESC_DIRECTION_ID)
-            directionId = (int) t.readVarint();
-          else if (tf == TRIPDESC_SCHEDULE_RELATIONSHIP)
-            relationship = (int) t.readVarint();
-          else
-            t.skip(wt.value);
+          if (tf == 1) trip = text(t, wt);
+          else if (tf == 2) start = text(t, wt);
+          else if (tf == 3) date = text(t, wt);
+          else if (tf == 4) relationship = small(t, wt);
+          else if (tf == 5) route = text(t, wt);
+          else if (tf == 6) direction = small(t, wt);
+          else t.skip(wt.value);
         }
       }
-      else if (f == TRIPUPDATE_STOP_TIME_UPDATE)
+      else if (f == 2)
       {
-        stops.add(parseStopTimeUpdate(r.readBytes(), wt));
+        if (stops.size() >= MAX_STOP_UPDATES_PER_TRIP)
+          throw new WireReader.WireException("too many stop updates");
+        stops.add(parseStop(bytes(r, wt)));
       }
-      else if (f == TRIPUPDATE_TIMESTAMP)
-      {
-        timestamp = r.readVarint();
-      }
-      else if (f == TRIPUPDATE_DELAY)
-      {
-        // Protobuf encodes negative int32 as a full 64-bit two's-complement
-        // varint; Java's signed long already yields the correct negative value
-        // with no reinterpretation step.
-        delay = r.readVarint();
-      }
-      else
-      {
-        r.skip(wt.value);
-      }
+      else if (f == 3) bytes(r, wt); // VehicleDescriptor: intentionally unused.
+      else if (f == 4) timestamp = nonnegative(r, wt);
+      else if (f == 5) delay = delay(r, wt);
+      else r.skip(wt.value);
     }
-    return new TripUpdate(tripId, routeId, directionId, startDate,
-                          relationship, delay, timestamp, stops);
+    if (!descriptor) throw new WireReader.WireException("trip update missing descriptor");
+    return new TripUpdate(trip, route, direction, date, start, relationship, delay, timestamp, stops);
   }
 
-  private static StopTimeUpdate parseStopTimeUpdate(byte[] raw, WireReader.OutInt wt)
+  private static StopTimeUpdate parseStop(byte[] raw)
   {
-    String stopId = null;
-    Integer stopSeq = null;
+    WireReader r = new WireReader(raw);
+    WireReader.OutInt wt = new WireReader.OutInt();
+    String stop = null;
+    Integer sequence = null;
     StopTimeEvent arrival = null, departure = null;
     int relationship = 0;
-
-    WireReader r = new WireReader(raw);
+    boolean unsupportedProperties = false;
     while (r.hasRemaining())
     {
       int f = r.readTag(wt);
-      if (f == STU_STOP_ID)
-        stopId = WireReader.utf8(r.readBytes());
-      else if (f == 1)                       // stop_sequence
-        stopSeq = (int) r.readVarint();
-      else if (f == STU_ARRIVAL)
-        arrival = parseEvent(r.readBytes(), wt);
-      else if (f == STU_DEPARTURE)
-        departure = parseEvent(r.readBytes(), wt);
-      else if (f == STU_SCHEDULE_RELATIONSHIP)
-        relationship = (int) r.readVarint();
-      else
-        r.skip(wt.value);
+      if (f == 1) sequence = small(r, wt);
+      else if (f == 2) arrival = parseEvent(bytes(r, wt));
+      else if (f == 3) departure = parseEvent(bytes(r, wt));
+      else if (f == 4) stop = text(r, wt);
+      else if (f == 5) relationship = small(r, wt);
+      else if (f == 6)
+      {
+        bytes(r, wt); // Canonical StopTimeProperties: bounded framing, no invented support.
+        unsupportedProperties = true;
+      }
+      else r.skip(wt.value);
     }
-    return new StopTimeUpdate(stopId, stopSeq, arrival, departure, relationship);
+    return new StopTimeUpdate(stop, sequence, arrival, departure, relationship, unsupportedProperties);
   }
 
-  private static StopTimeEvent parseEvent(byte[] raw, WireReader.OutInt wt)
+  private static StopTimeEvent parseEvent(byte[] raw)
   {
-    Long time = null, delay = null;
     WireReader r = new WireReader(raw);
+    WireReader.OutInt wt = new WireReader.OutInt();
+    Long time = null, delay = null;
     while (r.hasRemaining())
     {
       int f = r.readTag(wt);
-      if (f == STE_TIME)
-        time = r.readVarint();
-      else if (f == STE_DELAY)
-        delay = r.readVarint();
-      else
-        r.skip(wt.value);
+      if (f == 1) delay = delay(r, wt);
+      else if (f == 2) time = number(r, wt);
+      else r.skip(wt.value);
     }
     return new StopTimeEvent(time, delay);
   }

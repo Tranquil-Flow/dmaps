@@ -22,7 +22,8 @@ import java.util.zip.ZipFile;
  * Bounded secure importer for .ctpack archives per PACK_CONTRACT.md:
  * literal entry names only, size caps, hash verification, schema pinning and
  * read-only integrity check before activation; atomic POSIX rename swap with
- * preserved previous pack on any failure; staged private files only.
+ * staged private files only. Caller holds the directory guard over staging, validation and commit;
+ * PackTrustStore owns recovery, history-preserving replacement and committed-failure reporting.
  */
 final class PackImporter
 {
@@ -31,47 +32,29 @@ final class PackImporter
   static final long MAX_STREAM_BYTES = 512L * 1024L * 1024L;
   private static final String MANIFEST_NAME = "manifest.json";
   private static final String DATABASE_NAME = "timetable.sqlite";
-  private static final String[] ALLOWED = {MANIFEST_NAME, DATABASE_NAME};
 
   private final File mStagingDb;
   private final File mStagingManifest;
   private final File mActiveDb;
   private final File mActiveManifest;
-  private final File mBackupDb;
-  private final File mBackupManifest;
 
   PackImporter(Context context)
   {
     File dir = new File(context.getFilesDir(), "transit_pack");
-    //noinspection ResultOfMethodCallIgnored
-    dir.mkdirs();
     mStagingDb = new File(dir, "staging.timetable.sqlite");
     mStagingManifest = new File(dir, "staging.manifest.json");
     mActiveDb = new File(dir, "timetable.sqlite");
     mActiveManifest = new File(dir, "manifest.json");
-    mBackupDb = new File(dir, "backup.timetable.sqlite");
-    mBackupManifest = new File(dir, "backup.manifest.json");
   }
 
   File activeDb() { return mActiveDb; }
   String stagedDatabasePathForValidation() { return mStagingDb.getAbsolutePath(); }
   File activeManifest() { return mActiveManifest; }
-  boolean hasActive() { return mActiveDb.isFile() && mActiveManifest.isFile(); }
 
   void deleteQuietly(File f)
   {
     if (f != null && f.exists() && !f.delete())
       f.deleteOnExit();
-  }
-
-  void removePack()
-  {
-    deleteQuietly(mActiveDb);
-    deleteQuietly(mActiveManifest);
-    deleteQuietly(mBackupDb);
-    deleteQuietly(mBackupManifest);
-    deleteQuietly(mStagingDb);
-    deleteQuietly(mStagingManifest);
   }
 
   private static String hex(byte[] digest)
@@ -104,11 +87,12 @@ final class PackImporter
   }
 
   /**
-   * Validate envelope + copy entries to staging. Returns verified manifest JSON.
+   * Validate envelope + copy exact entries to staging. Returns the caller-mode verifier result.
    * Envelope rules: exactly the two literal root names, no dirs/traversal/
    * duplicates/symlinks/encryption; per-entry and total stream caps.
    */
-  JSONObject stageAndValidateManifest(InputStream input) throws IOException
+  PackEnvelope.Result stageAndValidateEnvelope(InputStream input, ImportMode mode,
+      PackTrustPolicy policy, java.time.Clock clock) throws IOException
   {
     if (input == null)
       throw new IllegalArgumentException("input stream is required");
@@ -185,7 +169,8 @@ final class PackImporter
         zf.close();
       }
       byte[] raw = readAll(new FileInputStream(mStagingManifest), MAX_MANIFEST_BYTES + 1);
-      JSONObject manifest = new JSONObject(new String(raw, java.nio.charset.StandardCharsets.UTF_8));
+      PackEnvelope.Result envelope = PackEnvelope.decode(raw, mode, policy, clock.instant());
+      JSONObject manifest = new JSONObject(envelope.manifest);
       validateManifestShape(manifest);
       // Verify database hash/length against manifest.
       String declaredSha = manifest.getString("database_sha256");
@@ -197,7 +182,7 @@ final class PackImporter
       countAndDigest(dbFile, md);
       if (!hex(md.digest()).equals(declaredSha))
         throw new IOException("database hash mismatch");
-      return manifest;
+      return envelope;
     }
     catch (java.security.NoSuchAlgorithmException | org.json.JSONException ex)
     {
@@ -281,7 +266,8 @@ final class PackImporter
   {
     try
     {
-      if (m.getInt("format_version") != 1)
+      int format = m.getInt("format_version");
+      if (format != 1 && format != 2)
         throw new IOException("unsupported format_version");
       if (!"vbb".equals(m.getString("publisher_id")))
         throw new IOException("unsupported publisher_id");
@@ -302,6 +288,13 @@ final class PackImporter
       int maxDep = m.getInt("max_departure_seconds");
       if (maxDep < 0 || maxDep > 604800)
         throw new IOException("max_departure_seconds out of range");
+      if (format == 2)
+      {
+        Object arrival = m.get("max_arrival_seconds");
+        if (!(arrival instanceof Number) || arrival instanceof Double || arrival instanceof Float
+            || ((Number) arrival).longValue() < 0 || ((Number) arrival).longValue() > 604800)
+          throw new IOException("max_arrival_seconds out of range");
+      }
       String tz = m.getString("timezone");
       java.time.ZoneId.of(tz); // rejects invalid IDs safely
       for (String k : new String[]{"publisher", "source_url", "attribution", "created_utc",
@@ -322,52 +315,11 @@ final class PackImporter
       throw new IOException("invalid manifest");
     }
   }
-
-  /**
-   * Atomically swap staged files over the active pack: previous pack moved to
-   * backup, staging renamed to active; on failure restore backup. POSIX
-   * rename without java.nio Files.move ATOMIC_MOVE on old API levels.
-   */
-  void activate() throws IOException
-  {
-    deleteQuietly(mBackupDb);
-    deleteQuietly(mBackupManifest);
-    if (mActiveDb.exists() && !mActiveDb.renameTo(mBackupDb))
-      throw new IOException("activation failed: backup");
-    if (mActiveManifest.exists() && !mActiveManifest.renameTo(mBackupManifest))
-    {
-      //noinspection ResultOfMethodCallIgnored
-      mBackupDb.renameTo(mActiveDb);
-      throw new IOException("activation failed: backup manifest");
-    }
-    if (!mStagingManifest.renameTo(mActiveManifest))
-    {
-      rollback();
-      throw new IOException("activation failed: manifest");
-    }
-    if (!mStagingDb.renameTo(mActiveDb))
-    {
-      rollback();
-      throw new IOException("activation failed: database");
-    }
-    deleteQuietly(mBackupDb);
-    deleteQuietly(mBackupManifest);
-  }
-
-  private void rollback()
-  {
-    deleteQuietly(mActiveManifest);
-    deleteQuietly(mActiveDb);
-    //noinspection ResultOfMethodCallIgnored
-    mBackupManifest.renameTo(mActiveManifest);
-    //noinspection ResultOfMethodCallIgnored
-    mBackupDb.renameTo(mActiveDb);
-  }
-
   /** Clean staged artifacts after a failed/validated import. */
   void cleanupStaging()
   {
     deleteQuietly(mStagingDb);
     deleteQuietly(mStagingManifest);
+    deleteQuietly(new File(mStagingDb.getParentFile(), "staging.trust-state.json"));
   }
 }

@@ -634,6 +634,8 @@ public:
 #endif
 
   void StopLocationFollow();
+  /// Temporary presentation only: also releases a pending position wait (no GPS/routing change).
+  void StopLocationFollowForPreview();
 
   /// Resize event from window.
   void OnSize(int w, int h);

@@ -449,7 +449,8 @@ public:
   {
     SwitchNextMode,
     LoseLocation,
-    StopFollowing
+    StopFollowing,
+    StopFollowingForPreview
   };
 
   explicit ChangeMyPositionModeMessage(EChangeType changeType) : m_changeType(changeType) {}

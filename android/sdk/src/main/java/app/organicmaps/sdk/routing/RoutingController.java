@@ -15,6 +15,7 @@ import app.organicmaps.sdk.util.concurrency.UiThread;
 import app.organicmaps.sdk.util.log.Logger;
 import app.organicmaps.sdk.widget.placepage.CoordinatesFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @androidx.annotation.UiThread
@@ -75,6 +76,13 @@ public class RoutingController
   private State mState = State.NONE;
   @Nullable
   private RouteMarkType mWaitingPoiPickType = null;
+  // Process-local picker authority survives Activity recreation, never disk route loading.
+  @Nullable
+  private RouteMarkData[] mReplacementSnapshot;
+  private int mReplacementIndex = -1;
+  private Router mReplacementRouter;
+  private long mRouteEditRevision;
+  private long mReplacementRevision;
   private int mLastBuildProgress;
   private Router mLastRouterType;
 
@@ -235,6 +243,8 @@ public class RoutingController
   private void setState(State newState)
   {
     Logger.d(TAG, "[S] State: " + mState + " -> " + newState + ", BuildState: " + mBuildState);
+    if (mState != newState)
+      ++mRouteEditRevision;
     mState = newState;
 
     if (mContainer != null)
@@ -326,6 +336,7 @@ public class RoutingController
 
   private void build()
   {
+    ++mRouteEditRevision;
     Framework.nativeRemoveRoute();
 
     Logger.d(TAG, "build");
@@ -342,6 +353,10 @@ public class RoutingController
 
   public void restoreRoute()
   {
+    // Loading persisted marks is a new edit session, not a resumed picker.
+    mWaitingPoiPickType = null;
+    mReplacementSnapshot = null;
+    ++mRouteEditRevision;
     Framework.nativeLoadRoutePoints();
   }
 
@@ -493,6 +508,7 @@ public class RoutingController
     Logger.d(TAG, "cancelInternal");
 
     mWaitingPoiPickType = null;
+    mReplacementSnapshot = null;
 
     setBuildState(BuildState.NONE);
     setState(State.NONE);
@@ -626,7 +642,227 @@ public class RoutingController
 
   public void waitForPoiPick(@NonNull RouteMarkType pointType)
   {
+    mReplacementSnapshot = null;
     mWaitingPoiPickType = pointType;
+  }
+
+  /** Start a one-shot replacement of an existing intermediate, never an insertion.
+   * expectedPoints is the displayed sheet order; unsaved/stale sheet edits are refused.
+   * No Activity, View or callback is retained across configuration changes.
+   */
+  public boolean waitForIntermediatePointReplacement(@NonNull RouteMarkData[] expectedPoints, int index)
+  {
+    return waitForIntermediatePointEdit(expectedPoints, index, false);
+  }
+
+  /** Append exactly before Finish, preserving all existing indices and the displayed sheet order.
+   * An index equal to the captured intermediate count denotes append in the same one-shot edit authority.
+   * Native admission additionally requires an active route and room for another mark.
+   * Complete Java planning endpoints alone do not establish that native prerequisite.
+   * No append authority is persisted or inferred from an ordinary Intermediate picker.
+   */
+  public boolean waitForIntermediatePointAppend(@NonNull RouteMarkData[] expectedPoints)
+  {
+    return waitForIntermediatePointEdit(expectedPoints, expectedPoints.length - 2, true);
+  }
+
+  /** Non-mutating admission for the explicit partial-route management entry. */
+  public boolean canCompleteMissingEndpoint(@NonNull RouteMarkData[] expectedPoints)
+  {
+    if (isWaitingPoiPick() || !isPlanning() || !isRoadRouter())
+      return false;
+    RouteMarkData[] points = Framework.nativeGetRoutePoints();
+    if (!sameRoutePoints(expectedPoints, points) || points.length != 1)
+      return false;
+    RouteMarkData point = points[0];
+    return (point.mPointType == RouteMarkType.Start || point.mPointType == RouteMarkType.Finish)
+        && point.mIntermediateIndex == 0 && !point.mIsPassed
+        && Double.isFinite(point.mLat) && Double.isFinite(point.mLon)
+        && Math.abs(point.mLat) <= 90 && Math.abs(point.mLon) <= 180;
+  }
+
+  /** Explicitly complete exactly one existing endpoint; never infer this from ordinary endpoint search.
+   * A partial route is not native-active, so Intermediate admission is intentionally inapplicable.
+   */
+  public boolean waitForMissingEndpoint(@NonNull RouteMarkData[] expectedPoints)
+  {
+    if (!canCompleteMissingEndpoint(expectedPoints))
+      return false;
+    RouteMarkData point = expectedPoints[0];
+    mReplacementSnapshot = new RouteMarkData[] {
+        new RouteMarkData(point.mTitle, point.mSubtitle, point.mPointType, point.mIntermediateIndex,
+                          point.mIsVisible, point.mIsMyPosition, point.mIsPassed, point.mLat, point.mLon)};
+    mReplacementIndex = -1;
+    mReplacementRouter = mLastRouterType;
+    mReplacementRevision = mRouteEditRevision;
+    mWaitingPoiPickType = point.mPointType == RouteMarkType.Start ? RouteMarkType.Finish : RouteMarkType.Start;
+    return true;
+  }
+
+  /** Leave only managed search authority; ordinary Start/Finish map continuation remains intact. */
+  public void cancelManagedRoutePointEdit()
+  {
+    if (mReplacementSnapshot != null)
+    {
+      mReplacementSnapshot = null;
+      mWaitingPoiPickType = null;
+    }
+    else
+      cancelIntermediatePointReplacement();
+  }
+
+  private void finishMissingEndpoint(@Nullable MapObject point)
+  {
+    RouteMarkData[] snapshot = mReplacementSnapshot;
+    RouteMarkType missing = mWaitingPoiPickType;
+    // Retire the one-shot capability before native writes or reentrant notifications.
+    mReplacementSnapshot = null;
+    mWaitingPoiPickType = null;
+    if (point == null || snapshot == null || snapshot.length != 1 || !isPlanning() || !isRoadRouter()
+        || mReplacementRouter != mLastRouterType || mReplacementRevision != mRouteEditRevision
+        || !sameRoutePoints(snapshot, Framework.nativeGetRoutePoints()))
+      return;
+    if ((missing != RouteMarkType.Start && missing != RouteMarkType.Finish)
+        || snapshot[0].mPointType == missing
+        || !Double.isFinite(point.getLat()) || !Double.isFinite(point.getLon())
+        || Math.abs(point.getLat()) > 90 || Math.abs(point.getLon()) > 180
+        || (point.isMyPosition() && snapshot[0].mIsMyPosition))
+      return;
+    Pair<String, String> description = getDescriptionForPoint(point);
+    applyRemovingIntermediatePointsTransaction();
+    int transaction = Framework.nativeOpenRoutePointsTransaction();
+    boolean committed = false;
+    try
+    {
+      // Do not use setStartPoint/setEndPoint: they rewrite the other endpoint and request reordering.
+      Framework.nativeAddRoutePoint(description.first, description.second, missing, 0,
+                                    point.isMyPosition(), point.getLat(), point.getLon(), false);
+      Framework.nativeApplyRoutePointsTransaction(transaction);
+      committed = true;
+    }
+    finally
+    {
+      if (!committed)
+        Framework.nativeCancelRoutePointsTransaction(transaction);
+    }
+    checkAndBuildRoute();
+  }
+
+  private boolean waitForIntermediatePointEdit(@NonNull RouteMarkData[] expectedPoints, int index, boolean append)
+  {
+    if (isWaitingPoiPick() || !isPlanning() || !isRoadRouter())
+      return false;
+    RouteMarkData[] points = Framework.nativeGetRoutePoints();
+    if (!sameRoutePoints(expectedPoints, points) || points.length < (append ? 2 : 3)
+        || points[0].mPointType != RouteMarkType.Start
+        || points[points.length - 1].mPointType != RouteMarkType.Finish)
+      return false;
+    if (index < 0 || (append ? index != points.length - 2 : index >= points.length - 2))
+      return false;
+    for (int i = 1; i < points.length - 1; ++i)
+      if (points[i].mPointType != RouteMarkType.Intermediate || points[i].mIntermediateIndex != i - 1
+          || points[i].mIsPassed)
+        return false;
+    if (append && !Framework.nativeCouldAddIntermediatePoint())
+      return false;
+    mReplacementSnapshot = new RouteMarkData[points.length];
+    for (int i = 0; i < points.length; ++i)
+    {
+      RouteMarkData p = points[i];
+      mReplacementSnapshot[i] = new RouteMarkData(p.mTitle, p.mSubtitle, p.mPointType, p.mIntermediateIndex,
+                                                 p.mIsVisible, p.mIsMyPosition, p.mIsPassed, p.mLat, p.mLon);
+    }
+    mReplacementIndex = index;
+    mReplacementRouter = mLastRouterType;
+    mReplacementRevision = mRouteEditRevision;
+    mWaitingPoiPickType = RouteMarkType.Intermediate;
+    return true;
+  }
+
+  /** Intermediate edits (replacement or append) are search-only. Map-result browsing is an explicit exit;
+   * leave the established Start/Finish picker continuation unchanged. */
+  public void cancelIntermediatePointReplacement()
+  {
+    if (mWaitingPoiPickType != RouteMarkType.Intermediate)
+      return;
+    mReplacementSnapshot = null;
+    mWaitingPoiPickType = null;
+  }
+
+  private boolean isRoadRouter()
+  {
+    return mLastRouterType == Router.Vehicle || mLastRouterType == Router.Pedestrian
+        || mLastRouterType == Router.Bicycle;
+  }
+
+  private static boolean sameRoutePoints(RouteMarkData[] a, RouteMarkData[] b)
+  {
+    if (a == null || b == null || a.length != b.length)
+      return false;
+    for (int i = 0; i < a.length; ++i)
+    {
+      RouteMarkData x = a[i], y = b[i];
+      // RouteMarkData.equals compares labels only and is deliberately NOT used here.
+      if (x == null || y == null || !Objects.equals(x.mTitle, y.mTitle)
+          || !Objects.equals(x.mSubtitle, y.mSubtitle) || x.mPointType != y.mPointType
+          || x.mIntermediateIndex != y.mIntermediateIndex || x.mIsVisible != y.mIsVisible
+          || x.mIsMyPosition != y.mIsMyPosition || x.mIsPassed != y.mIsPassed
+          || Double.compare(x.mLat, y.mLat) != 0 || Double.compare(x.mLon, y.mLon) != 0)
+        return false;
+    }
+    return true;
+  }
+
+  private void finishIntermediateReplacement(@Nullable MapObject point)
+  {
+    RouteMarkData[] snapshot = mReplacementSnapshot;
+    // Consume before any native effect or reentrant UI notification.
+    mReplacementSnapshot = null;
+    mWaitingPoiPickType = null;
+    if (point == null || snapshot == null || !isPlanning() || !isRoadRouter()
+        || mReplacementRouter != mLastRouterType || mReplacementRevision != mRouteEditRevision
+        || !sameRoutePoints(snapshot, Framework.nativeGetRoutePoints()))
+      return;
+    if (!Double.isFinite(point.getLat()) || !Double.isFinite(point.getLon())
+        || Math.abs(point.getLat()) > 90 || Math.abs(point.getLon()) > 180)
+      return;
+    boolean append = mReplacementIndex == snapshot.length - 2;
+    int slot = mReplacementIndex + 1;
+    if (point.isMyPosition())
+      for (int i = 0; i < snapshot.length; ++i)
+        if ((append || i != slot) && snapshot[i].mIsMyPosition)
+          return; // Native add would otherwise silently remove that unrelated mark.
+    Pair<String, String> description = getDescriptionForPoint(point);
+    if (!append)
+    {
+      RouteMarkData old = snapshot[slot];
+      if (old.mIsMyPosition == point.isMyPosition() && Double.compare(old.mLat, point.getLat()) == 0
+          && Double.compare(old.mLon, point.getLon()) == 0 && Objects.equals(old.mTitle, description.first)
+          && Objects.equals(old.mSubtitle, description.second))
+        return;
+    }
+    applyRemovingIntermediatePointsTransaction();
+    int transaction = Framework.nativeOpenRoutePointsTransaction();
+    boolean committed = false;
+    try
+    {
+      // Recheck the native admission predicate immediately before insertion, not a Java cap.
+      // Refusal still retires the picker and closes this undo snapshot without rebuilding.
+      if (append && !Framework.nativeCouldAddIntermediatePoint())
+        return;
+      if (!append)
+        Framework.nativeRemoveRoutePoint(RouteMarkType.Intermediate, mReplacementIndex);
+      Framework.nativeAddRoutePoint(description.first, description.second, RouteMarkType.Intermediate,
+                                    mReplacementIndex, point.isMyPosition(), point.getLat(), point.getLon(), false);
+      Framework.nativeApplyRoutePointsTransaction(transaction);
+      committed = true;
+    }
+    finally
+    {
+      if (!committed)
+        Framework.nativeCancelRoutePointsTransaction(transaction);
+    }
+    checkAndBuildRoute();
   }
 
   public boolean isWaitingPoiPick()
@@ -864,6 +1100,7 @@ public class RoutingController
     if (router == mLastRouterType)
       return;
 
+    ++mRouteEditRevision;
     mLastRouterType = router;
     Router.set(router);
 
@@ -900,6 +1137,28 @@ public class RoutingController
   {
     if (!isWaitingPoiPick())
       return;
+
+    if (mReplacementSnapshot != null && mWaitingPoiPickType != RouteMarkType.Intermediate)
+    {
+      finishMissingEndpoint(point);
+      if (mContainer != null)
+      {
+        mContainer.updateMenu();
+        showRoutePlan();
+      }
+      return;
+    }
+
+    if (mWaitingPoiPickType == RouteMarkType.Intermediate)
+    {
+      finishIntermediateReplacement(point);
+      if (mContainer != null)
+      {
+        mContainer.updateMenu();
+        showRoutePlan();
+      }
+      return;
+    }
 
     if (mWaitingPoiPickType != RouteMarkType.Start && mWaitingPoiPickType != RouteMarkType.Finish)
       throw new AssertionError("Only start and finish points can be added through search!");

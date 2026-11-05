@@ -59,6 +59,8 @@ public final class WireReader
       if (shift >= 70)
         throw new WireException("varint too long");
       int b = mBuf[mPos++] & 0xFF;
+      if (shift == 63 && (b & 0xfe) != 0)
+        throw new WireException("varint exceeds 64 bits");
       result |= (long) (b & 0x7F) << shift;
       if ((b & 0x80) == 0)
         return result;
@@ -70,10 +72,14 @@ public final class WireReader
   public int readTag(OutInt outWireType)
   {
     long key = readVarint();
+    if (key < 0 || key > 0xffffffffL)
+      throw new WireException("tag exceeds protobuf field range");
     int field = (int) (key >>> 3);
     int wtype = (int) (key & 0x07);
     if (field == 0)
       throw new WireException("field number 0 is invalid");
+    if (wtype != VARINT && wtype != LEN && wtype != FIXED32 && wtype != FIXED64)
+      throw new WireException("unsupported wire type " + wtype);
     outWireType.value = wtype;
     return field;
   }

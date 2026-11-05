@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/route_altitude_chart"
+  android:layout_width="match_parent"
+  android:layout_height="wrap_content"
+  android:orientation="vertical"
+  android:visibility="gone">
+  <com.google.android.material.textview.MaterialTextView
+    android:id="@+id/route_altitude_min"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textAppearance="@style/MwmTextAppearance.Body3"
+    android:visibility="gone" />
+  <com.google.android.material.textview.MaterialTextView
+    android:id="@+id/route_altitude_max"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textAppearance="@style/MwmTextAppearance.Body3"
+    android:visibility="gone" />
+  <com.github.mikephil.charting.charts.LineChart
+    android:id="@+id/route_altitude_line_chart"
+    android:layout_width="match_parent"
+    android:layout_height="160dp" />
+  <com.google.android.material.textview.MaterialTextView
+    android:id="@+id/route_altitude_selection"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textAppearance="@style/MwmTextAppearance.Body3"
+    android:visibility="gone" />
+</LinearLayout>

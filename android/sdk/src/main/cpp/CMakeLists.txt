@@ -18,6 +18,10 @@ set(SRC
   app/organicmaps/sdk/platform/GuiThread.hpp
   app/organicmaps/sdk/platform/AndroidPlatform.hpp
   app/organicmaps/sdk/util/Distance.hpp
+  app/organicmaps/sdk/util/Ed25519.cpp
+  app/organicmaps/sdk/transit/RegisteredWalkingMaps.cpp
+  app/organicmaps/sdk/transit/MappedWalking.cpp
+  app/organicmaps/sdk/transit/WalkingMapOverlay.cpp
   app/organicmaps/sdk/util/FeatureIdBuilder.hpp
   app/organicmaps/sdk/vulkan/android_vulkan_context_factory.hpp
 
@@ -97,6 +101,10 @@ set(SRC
   app/organicmaps/sdk/vulkan/android_vulkan_context_factory.cpp
 )
 
+# JNI coordinate validation must not inherit finite-only optimizations.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties(app/organicmaps/sdk/transit/MappedWalking.cpp app/organicmaps/sdk/transit/RegisteredWalkingMaps.cpp app/organicmaps/sdk/transit/WalkingMapOverlay.cpp PROPERTIES COMPILE_OPTIONS "-fno-fast-math")
+endif()
 omim_add_library(${PROJECT_NAME} SHARED ${SRC})
 
 target_include_directories(${PROJECT_NAME} PRIVATE .)

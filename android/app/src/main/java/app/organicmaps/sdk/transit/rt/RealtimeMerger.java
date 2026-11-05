@@ -1,56 +1,30 @@
 package app.organicmaps.sdk.transit.rt;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Merges scheduled departures with realtime overlays into display rows.
- *
- * The output model exists to make one distinction impossible to lose: a row
- * with no live data is NOT the same as a row that live data confirms as on
- * time. With the measured VBB join rate at 62-67%, roughly a third of rows
- * will have no realtime overlay, and rendering those as ordinary live
- * departures would be a claim the data does not support.
- */
+/** Exact scheduled/live merge; absent, ambiguous or unsupported evidence stays scheduled-only. */
 public final class RealtimeMerger
 {
   private RealtimeMerger() {}
-
-  /** How much the display row can honestly claim about a departure. */
-  public enum LiveState
-  {
-    /** No resolvable live data. Not evidence of normal service. */
-    SCHEDULED_ONLY,
-    LIVE,
-    DELAYED,
-    CANCELED
-  }
-
-  /** A delay at or below this reads as "on time". */
+  public enum LiveState { SCHEDULED_ONLY, LIVE, DELAYED, CANCELED }
   public static final int DEFAULT_DELAY_THRESHOLD_SECONDS = 90;
-  /** Beyond this age the overlay is stale regardless of what it says. */
   public static final int DEFAULT_STALE_AFTER_SECONDS = 600;
 
-  /** One line of a departure board. */
   public static final class DepartureRow
   {
-    public final String tripSourceId;
-    public final String line;
-    public final String destination;
-    public final String platform;
+    public final String tripSourceId, line, destination, platform;
     public final long scheduledDeparture;
     public final LiveState state;
-    public final Long liveDeparture;
-    public final Long delaySeconds;
-    public final Long feedTimestamp;
+    public final Long liveDeparture, delaySeconds, feedTimestamp;
     public final boolean stale;
-
-    DepartureRow(String tripSourceId, String line, String destination,
-                 String platform, long scheduledDeparture, LiveState state,
-                 Long liveDeparture, Long delaySeconds, Long feedTimestamp,
-                 boolean stale)
+    DepartureRow(String tripSourceId, String line, String destination, String platform,
+                 long scheduledDeparture, LiveState state, Long liveDeparture, Long delay,
+                 Long timestamp, boolean stale)
     {
       this.tripSourceId = tripSourceId;
       this.line = line;
@@ -59,199 +33,185 @@ public final class RealtimeMerger
       this.scheduledDeparture = scheduledDeparture;
       this.state = state;
       this.liveDeparture = liveDeparture;
-      this.delaySeconds = delaySeconds;
-      this.feedTimestamp = feedTimestamp;
+      this.delaySeconds = delay;
+      this.feedTimestamp = timestamp;
       this.stale = stale;
     }
-
     public boolean hasLiveData() { return state != LiveState.SCHEDULED_ONLY; }
-
-    /** A cancelled trip is still listed but must never read as departable. */
     public boolean isBoardable() { return state != LiveState.CANCELED; }
   }
 
-  /** The scheduled half of a row, before realtime is overlaid. */
   public static final class ScheduledRow
   {
-    public final String tripSourceId;
-    public final String line;
-    public final String destination;
-    public final String platform;
+    public final String tripSourceId, line, destination, platform, platformSourceId, serviceDate;
     public final long scheduledDeparture;
-    /** The PLATFORM id, not the station — see class javadoc in the Python port. */
-    public final String platformSourceId;
-
-    public ScheduledRow(String tripSourceId, String line, String destination,
-                        String platform, long scheduledDeparture,
-                        String platformSourceId)
+    public final Integer stopSequence;
+    public ScheduledRow(String trip, String line, String destination, String platform,
+                        long departure, String stop)
+    { this(trip, line, destination, platform, departure, stop, null, null); }
+    public ScheduledRow(String trip, String line, String destination, String platform,
+                        long departure, String stop, String date, Integer sequence)
     {
-      this.tripSourceId = tripSourceId;
+      this.tripSourceId = trip;
       this.line = line;
       this.destination = destination;
       this.platform = platform;
-      this.scheduledDeparture = scheduledDeparture;
-      this.platformSourceId = platformSourceId;
+      this.scheduledDeparture = departure;
+      this.platformSourceId = stop;
+      this.serviceDate = date;
+      this.stopSequence = sequence;
     }
   }
 
-  /**
-   * True when a delay value could plausibly describe lateness.
-   *
-   * Guards against provider deviations from the GTFS-RT spec. VBB's live feed
-   * puts an absolute epoch timestamp in TripUpdate.delay (measured 2026-10-13:
-   * field 4 = 1791872519, an epoch, not ~1000 seconds of lateness), so
-   * trusting that field unconditionally turns every departure into "late by
-   * 1.79e9 s". A failing value is treated as ABSENT rather than as a huge
-   * delay — the difference between "we don't know" and confidently wrong.
-   */
+  /** Semantic guard after canonical decoding; Math.abs(Long.MIN_VALUE) is not a bound. */
   public static boolean isPlausibleDelay(Long delay)
   {
-    return delay != null
-        && Math.abs(delay) <= GtfsRealtime.MAX_PLAUSIBLE_DELAY_SECONDS;
+    return delay != null && delay >= -GtfsRealtime.MAX_PLAUSIBLE_DELAY_SECONDS
+        && delay <= GtfsRealtime.MAX_PLAUSIBLE_DELAY_SECONDS;
   }
 
-  private static GtfsRealtime.StopTimeUpdate stopUpdateFor(
-      GtfsRealtime.TripUpdate u, String stopId)
+  static boolean matchesInstance(ScheduledRow row, GtfsRealtime.TripUpdate update)
   {
-    if (u == null || stopId == null)
-      return null;
-    for (GtfsRealtime.StopTimeUpdate s : u.stopTimeUpdates)
-      if (stopId.equals(s.stopId))
-        return s;
-    return null;
-  }
-
-  /** Best known absolute departure for a stop, or null. */
-  public static Long resolveLiveDeparture(GtfsRealtime.TripUpdate update,
-                                          String stopId,
-                                          long scheduledDeparture)
-  {
-    GtfsRealtime.StopTimeUpdate stu = stopUpdateFor(update, stopId);
-    if (stu != null)
+    if (update == null || update.tripId == null || !update.tripId.equals(row.tripSourceId)
+        || update.startTime != null) return false; // frequency instances are unsupported
+    if (update.startDate == null) return true; // board-level ambiguity checked by RealtimeBoard
+    if (row.serviceDate == null || !update.startDate.matches("[0-9]{8}")) return false;
+    try
     {
-      // Per-stop data is authoritative: it is what describes this platform.
-      if (stu.departure != null && stu.departure.time != null)
-        return stu.departure.time;
-      if (stu.departure != null && isPlausibleDelay(stu.departure.delay))
-        return scheduledDeparture + stu.departure.delay;
+      return LocalDate.parse(row.serviceDate).format(DateTimeFormatter.BASIC_ISO_DATE).equals(update.startDate)
+          && LocalDate.parse(update.startDate, DateTimeFormatter.BASIC_ISO_DATE) != null;
     }
-    // Trip-level delay is last resort and only when plausible.
-    if (isPlausibleDelay(update.delay))
-      return scheduledDeparture + update.delay;
+    catch (java.time.DateTimeException invalid) { return false; }
+  }
+
+  /** Both feed creation and trip observation must be current; neither renews the other. */
+  static Long evidenceTimestamp(GtfsRealtime.TripUpdate update, Long header, long now)
+  {
+    Long trip = update != null ? update.timestamp : null;
+    if ((header != null && (header < 0 || header > now))
+        || (trip != null && (trip < 0 || trip > now))) return null;
+    if (header == null) return trip;
+    if (trip == null) return header;
+    return Math.min(header, trip);
+  }
+
+  private static GtfsRealtime.StopTimeUpdate stopUpdateFor(GtfsRealtime.TripUpdate u,
+                                                          String stopId, Integer sequence, boolean allowStopIdOnly)
+  {
+    if (u == null || stopId == null) return null;
+    GtfsRealtime.StopTimeUpdate found = null;
+    for (GtfsRealtime.StopTimeUpdate s : u.stopTimeUpdates)
+    {
+      if (!allowStopIdOnly && (sequence == null || s.stopSequence == null)) continue;
+      boolean sameStop = stopId.equals(s.stopId)
+          || (s.stopId == null && sequence != null && sequence.equals(s.stopSequence));
+      if (!sameStop || (sequence != null && s.stopSequence != null && !sequence.equals(s.stopSequence)))
+        continue;
+      if (found != null) return null; // repeated/ambiguous occurrences are never guessed
+      found = s;
+    }
+    return found;
+  }
+
+  public static Long resolveLiveDeparture(GtfsRealtime.TripUpdate u, String stopId, long scheduled)
+  { return resolveLiveDeparture(u, stopId, scheduled, null, true); }
+
+  private static Long resolveLiveDeparture(GtfsRealtime.TripUpdate u, String stopId,
+                                           long scheduled, Integer sequence, boolean allowStopIdOnly)
+  {
+    if (u == null) return null;
+    GtfsRealtime.StopTimeUpdate s = stopUpdateFor(u, stopId, sequence, allowStopIdOnly);
+    try
+    {
+      if (s != null)
+      {
+        if (s.hasUnsupportedStopProperties || s.scheduleRelationship != 0) return null;
+        // Do not bless timing at the old platform or with unsupported pickup changes.
+        if (s.departure != null && s.departure.time != null) return s.departure.time;
+        if (s.departure != null && isPlausibleDelay(s.departure.delay))
+          return Math.addExact(scheduled, s.departure.delay);
+      }
+      // With per-stop updates, an omitted stop/occurrence is not a prediction.
+      // Delay propagation is outside this bounded pilot, rather than guessed.
+      if (u.stopTimeUpdates.isEmpty() && isPlausibleDelay(u.delay))
+        return Math.addExact(scheduled, u.delay);
+    }
+    catch (ArithmeticException overflow) { return null; }
     return null;
   }
 
-  /** True when the trip runs but does not serve this stop. */
-  public static boolean isStopSkipped(GtfsRealtime.TripUpdate update, String stopId)
+  public static boolean isStopSkipped(GtfsRealtime.TripUpdate u, String stopId)
   {
-    GtfsRealtime.StopTimeUpdate stu = stopUpdateFor(update, stopId);
-    return stu != null && stu.isSkipped();
+    GtfsRealtime.StopTimeUpdate s = stopUpdateFor(u, stopId, null, true);
+    return s != null && s.isSkipped();
   }
 
-  /**
-   * Produces a display row, or null if the trip should not appear at all.
-   *
-   * Returning null is correct when a matched trip explicitly skips this stop:
-   * listing it would send a passenger to a platform for a train that does not
-   * stop. Everything else degrades to SCHEDULED_ONLY rather than disappearing.
-   */
-  public static DepartureRow mergeRow(ScheduledRow row,
-                                      GtfsRealtime.TripUpdate update,
-                                      String stopId, Long feedTimestamp,
-                                      long now, int delayThreshold,
-                                      int staleAfter)
+  /** Null suppresses only a fresh, exactly matched skipped occurrence. */
+  public static DepartureRow mergeRow(ScheduledRow row, GtfsRealtime.TripUpdate update,
+                                      String stopId, Long headerTimestamp, long now,
+                                      int delayThreshold, int staleAfter)
   {
-    boolean isStale = feedTimestamp != null && (now - feedTimestamp) > staleAfter;
+    return mergeRow(row, update, stopId, headerTimestamp, now, delayThreshold, staleAfter, true);
+  }
 
-    if (update == null)
-      return new DepartureRow(row.tripSourceId, row.line, row.destination,
-          row.platform, row.scheduledDeparture, LiveState.SCHEDULED_ONLY,
-          null, null, feedTimestamp, isStale);
-
-    if (isStopSkipped(update, stopId))
-      return null;
-
+  static DepartureRow mergeRow(ScheduledRow row, GtfsRealtime.TripUpdate update,
+      String stopId, Long headerTimestamp, long now, int delayThreshold, int staleAfter,
+      boolean allowStopIdOnly)
+  {
+    Long timestamp = evidenceTimestamp(update, headerTimestamp, now);
+    boolean invalidAge = timestamp == null || timestamp < 0 || timestamp > now;
+    boolean stale = invalidAge || now - timestamp > staleAfter;
+    if (!matchesInstance(row, update) || invalidAge
+        || (update.scheduleRelationship != 0 && !update.isCanceled()))
+      return scheduled(row, timestamp, stale);
     if (update.isCanceled())
-      return new DepartureRow(row.tripSourceId, row.line, row.destination,
-          row.platform, row.scheduledDeparture, LiveState.CANCELED,
-          null, null, feedTimestamp, isStale);
-
-    Long live = resolveLiveDeparture(update, stopId, row.scheduledDeparture);
+      return new DepartureRow(row.tripSourceId, row.line, row.destination, row.platform,
+          row.scheduledDeparture, LiveState.CANCELED, null, null, timestamp, stale);
+    GtfsRealtime.StopTimeUpdate stop = stopUpdateFor(update, stopId, row.stopSequence, allowStopIdOnly);
+    if (stop != null && stop.isSkipped())
+      return stale ? scheduled(row, timestamp, true) : null;
+    Long live = resolveLiveDeparture(update, stopId, row.scheduledDeparture, row.stopSequence, allowStopIdOnly);
     Long delay = null;
-    if (live != null)
-      delay = live - row.scheduledDeparture;
-    else if (isPlausibleDelay(update.delay))
-      delay = update.delay;
-
-    // Only claim LIVE/DELAYED when a plausible live time was derived. An
-    // implausible trip-level delay leaves the row SCHEDULED_ONLY rather than
-    // inventing a delay from a bad field.
-    LiveState state;
-    if (delay == null || !isPlausibleDelay(delay))
-      state = LiveState.SCHEDULED_ONLY;
-    else
-      state = Math.abs(delay) > delayThreshold ? LiveState.DELAYED : LiveState.LIVE;
-
-    return new DepartureRow(row.tripSourceId, row.line, row.destination,
-        row.platform, row.scheduledDeparture, state, live, delay,
-        feedTimestamp, isStale);
+    try { if (live != null) delay = Math.subtractExact(live, row.scheduledDeparture); }
+    catch (ArithmeticException overflow) { live = null; }
+    if (!isPlausibleDelay(delay)) return scheduled(row, timestamp, stale);
+    LiveState state = Math.abs(delay) > delayThreshold ? LiveState.DELAYED : LiveState.LIVE;
+    return new DepartureRow(row.tripSourceId, row.line, row.destination, row.platform,
+        row.scheduledDeparture, state, live, delay, timestamp, stale);
   }
 
-  /**
-   * Overlays realtime onto scheduled rows, preserving schedule order.
-   *
-   * Scheduled order is retained deliberately: realtime must not silently
-   * reorder a board a passenger reads top-to-bottom.
-   */
+  private static DepartureRow scheduled(ScheduledRow row, Long timestamp, boolean stale)
+  {
+    return new DepartureRow(row.tripSourceId, row.line, row.destination, row.platform,
+        row.scheduledDeparture, LiveState.SCHEDULED_ONLY, null, null, timestamp, stale);
+  }
+
+  /** Legacy diagnostic join; the app uses RealtimeBoard's instance-aware raw-feed projection. */
   public static List<DepartureRow> mergeBoard(List<ScheduledRow> scheduled,
                                               Map<String, GtfsRealtime.TripUpdate> joined,
-                                              Long feedTimestamp, long now,
-                                              int delayThreshold, int staleAfter)
+                                              Long timestamp, long now, int threshold, int staleAfter)
   {
-    Long ts = feedTimestamp;
-    if (ts == null)
-    {
-      // Fallback only: newest trip-level timestamp. The FeedHeader timestamp is
-      // authoritative, because a single recently-updated trip would otherwise
-      // make an hour-old feed look current.
-      for (ScheduledRow row : scheduled)
-      {
-        GtfsRealtime.TripUpdate u = joined.get(row.tripSourceId);
-        if (u != null && u.timestamp != null
-            && (ts == null || u.timestamp > ts))
-          ts = u.timestamp;
-      }
-    }
-
     List<DepartureRow> out = new ArrayList<>();
     for (ScheduledRow row : scheduled)
     {
-      DepartureRow merged = mergeRow(row, joined.get(row.tripSourceId),
-          row.platformSourceId, ts, now, delayThreshold, staleAfter);
-      if (merged != null)
-        out.add(merged);
+      DepartureRow merged = mergeRow(row, joined.get(row.tripSourceId), row.platformSourceId,
+          timestamp, now, threshold, staleAfter);
+      if (merged != null) out.add(merged);
     }
     return out;
   }
 
-  /**
-   * Joins feed trip_ids to the pack's trip source ids, dropping unresolved.
-   *
-   * Unresolved updates are DROPPED, never matched heuristically: a fallback
-   * join on line+time+direction attaches a live cancellation to a plausible
-   * trip it does not describe, inventing an event that never happened.
-   */
-  public static Map<String, GtfsRealtime.TripUpdate> joinToPack(
-      GtfsRealtime.FeedMessage feed, java.util.Set<String> packTripIds)
+  public static Map<String, GtfsRealtime.TripUpdate> joinToPack(GtfsRealtime.FeedMessage feed,
+                                                               java.util.Set<String> ids)
   {
-    Map<String, GtfsRealtime.TripUpdate> resolved = new LinkedHashMap<>();
+    Map<String, GtfsRealtime.TripUpdate> out = new LinkedHashMap<>();
+    java.util.Set<String> duplicate = new java.util.HashSet<>();
     for (GtfsRealtime.TripUpdate u : feed.tripUpdates)
     {
-      if (u.tripId == null)
-        continue;
-      if (packTripIds.contains(u.tripId))
-        resolved.put(u.tripId, u);
+      if (u.tripId == null || !ids.contains(u.tripId)) continue;
+      if (out.put(u.tripId, u) != null) duplicate.add(u.tripId);
     }
-    return resolved;
+    for (String id : duplicate) out.remove(id); // never use whichever update arrived last
+    return out;
   }
 }

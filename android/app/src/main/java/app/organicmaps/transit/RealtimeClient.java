@@ -1,12 +1,11 @@
 package app.organicmaps.transit;
 
-import android.util.Log;
-
 import androidx.annotation.StringRes;
 
 import app.organicmaps.R;
 import app.organicmaps.sdk.transit.rt.GtfsRealtime;
 import app.organicmaps.sdk.transit.rt.RealtimeMerger;
+import app.organicmaps.sdk.transit.rt.RealtimeRequest;
 import app.organicmaps.sdk.transit.rt.WireReader;
 
 import java.io.ByteArrayOutputStream;
@@ -36,7 +35,6 @@ import java.util.zip.GZIPInputStream;
  */
 public final class RealtimeClient
 {
-  private static final String TAG = "RealtimeClient";
   private static final int CONNECT_TIMEOUT_MS = 15_000;
   private static final int READ_TIMEOUT_MS = 30_000;
   private static final int MAX_BYTES = 64 * 1024 * 1024;
@@ -45,6 +43,8 @@ public final class RealtimeClient
   public static final class Result
   {
     public final Map<String, GtfsRealtime.TripUpdate> joined;
+    /** Full validated snapshot, retained for exact instance/occurrence projection. */
+    public final GtfsRealtime.FeedMessage feed;
     public final Long feedTimestamp;
     public final long fetchedAtEpochSec;
     public final int feedTripUpdates;
@@ -63,6 +63,15 @@ public final class RealtimeClient
            long fetchedAtEpochSec, int feedTripUpdates, String etag,
            String scheduleSha, boolean notModified, String error, int errorRes)
     {
+      this(joined, feedTimestamp, fetchedAtEpochSec, feedTripUpdates, etag, scheduleSha,
+          notModified, error, errorRes, null);
+    }
+
+    Result(Map<String, GtfsRealtime.TripUpdate> joined, Long feedTimestamp, long fetchedAtEpochSec,
+           int feedTripUpdates, String etag, String scheduleSha, boolean notModified,
+           String error, int errorRes, GtfsRealtime.FeedMessage feed)
+    {
+      this.feed = feed;
       this.joined = joined;
       this.feedTimestamp = feedTimestamp;
       this.fetchedAtEpochSec = fetchedAtEpochSec;
@@ -76,6 +85,11 @@ public final class RealtimeClient
 
     public boolean ok() { return error == null; }
   }
+
+  /** Offline-preview shipping capability. Not a preference, import field, intent extra or fallback.
+   * A separately approved and qualified live release must change its source-bound build policy. */
+  private static final boolean LIVE_CAPABILITY_ENABLED = false;
+  public static boolean liveUpdatesAvailable() { return LIVE_CAPABILITY_ENABLED; }
 
   private RealtimeClient() {}
 
@@ -97,12 +111,30 @@ public final class RealtimeClient
   public static Result fetchAndJoin(String relayBase, String region, int horizonSec,
                                     Set<String> packTripIds, String previousEtag)
   {
+    return fetchAndJoin(relayBase, region, horizonSec, packTripIds, previousEtag, new RealtimeRequest());
+  }
+
+  public static Result fetchAndJoin(String relayBase, String region, int horizonSec,
+                                    Set<String> packTripIds, String previousEtag, RealtimeRequest ticket)
+  {
+    // Deny before parsing the endpoint, reading caller state, allocating a connection or its I/O.
+    if (!liveUpdatesAvailable()) return fail("offline-preview", R.string.transit_offline_preview);
+    return fetchLivePrototype(relayBase, region, horizonSec, packTripIds, previousEtag, ticket);
+  }
+
+  /** Retained live transport primitive for a separate release. No UI/import/intent can select it.
+   * Host transport controls exercise this private body explicitly; that is not preview authority. */
+  private static Result fetchLivePrototype(String relayBase, String region, int horizonSec,
+                                          Set<String> packTripIds, String previousEtag, RealtimeRequest ticket)
+  {
     long now = System.currentTimeMillis() / 1000L;
     HttpURLConnection conn = null;
     try
     {
+      if (ticket.isCanceled()) return fail("revoked", R.string.transit_live_reason_offline);
       String url = relayBase + "/v1/slice?region=" + region + "&horizon=" + horizonSec;
       conn = (HttpURLConnection) new URL(url).openConnection();
+      if (!ticket.attach(conn)) return fail("revoked", R.string.transit_live_reason_offline);
       conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
       conn.setReadTimeout(READ_TIMEOUT_MS);
       conn.setRequestMethod("GET");
@@ -111,20 +143,24 @@ public final class RealtimeClient
       if (previousEtag != null && !previousEtag.isEmpty())
         conn.setRequestProperty("If-None-Match", previousEtag);
 
+      if (ticket.isCanceled()) return fail("revoked", R.string.transit_live_reason_offline);
       int code = conn.getResponseCode();
       if (code == HttpURLConnection.HTTP_NOT_MODIFIED)
+      {
+        if (previousEtag == null) return fail("unexpected 304", R.string.transit_live_reason_bad_feed);
         return new Result(new LinkedHashMap<>(), null, now, 0,
                           previousEtag, null, true, null, 0);
+      }
       if (code != 200)
         return fail("relay returned HTTP " + code, R.string.transit_live_reason_refused);
 
       // The relay's ETag is an opaque validator (an MD5 hex in practice), not
       // an epoch. It is kept verbatim as a string and echoed back unchanged;
       // forcing it to a number would silently disable revalidation.
-      String etag = conn.getHeaderField("ETag");
+      String etag = boundedHeader(conn.getHeaderField("ETag"));
       String sha = boundedHeader(conn.getHeaderField("X-Schedule-Sha"));
 
-      byte[] raw = readFully(conn);
+      byte[] raw = readFully(conn, ticket);
       if (raw == null || raw.length == 0)
         return fail("empty response body", R.string.transit_live_reason_bad_feed);
 
@@ -143,16 +179,14 @@ public final class RealtimeClient
       Map<String, GtfsRealtime.TripUpdate> joined =
           RealtimeMerger.joinToPack(feed, packTripIds);
       return new Result(joined, feed.timestamp, now, feed.tripUpdates.size(),
-                        etag, sha, false, null, 0);
+                        etag, sha, false, null, 0, GtfsRealtime.forTripIds(feed, packTripIds));
     }
     catch (java.net.SocketTimeoutException e)
     {
-      Log.i(TAG, "realtime fetch timed out");
       return fail("timeout", R.string.transit_live_reason_timeout);
     }
     catch (Exception e)
     {
-      Log.i(TAG, "realtime fetch failed: " + e.getClass().getSimpleName());
       return fail(e.getClass().getSimpleName(), R.string.transit_live_reason_offline);
     }
     finally
@@ -183,7 +217,7 @@ public final class RealtimeClient
   }
 
   /** Reads the body, honouring gzip when the relay used it. */
-  private static byte[] readFully(HttpURLConnection conn) throws java.io.IOException
+  private static byte[] readFully(HttpURLConnection conn, RealtimeRequest ticket) throws java.io.IOException
   {
     String encoding = conn.getContentEncoding();
     InputStream in = conn.getInputStream();
@@ -196,6 +230,7 @@ public final class RealtimeClient
       int total = 0, n;
       while ((n = src.read(buf)) > 0)
       {
+        if (ticket.isCanceled()) throw new java.io.IOException("request revoked");
         total += n;
         if (total > MAX_BYTES)
           throw new java.io.IOException("response exceeds " + MAX_BYTES + " bytes");

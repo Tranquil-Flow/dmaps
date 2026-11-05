@@ -14,6 +14,7 @@ import app.organicmaps.sdk.bookmarks.data.DistanceAndAzimut;
 import app.organicmaps.sdk.bookmarks.data.FeatureId;
 import app.organicmaps.sdk.bookmarks.data.MapObject;
 import app.organicmaps.sdk.routing.JunctionInfo;
+import app.organicmaps.sdk.routing.RouteAltitudeData;
 import app.organicmaps.sdk.routing.RouteMarkData;
 import app.organicmaps.sdk.routing.RouteMarkType;
 import app.organicmaps.sdk.routing.RouteStepInfo;
@@ -55,6 +56,9 @@ public class Framework
     public String totalAscentString;
     public String totalDescentString;
     public boolean isMetricUnits;
+    // Optional raw samples from the same snapshot as the legacy bitmap/statistics.
+    @Nullable
+    public RouteAltitudeData profile;
   }
 
   // Used by JNI.
@@ -91,6 +95,7 @@ public class Framework
   @Nullable
   public static Bitmap generateRouteAltitudeChart(int width, int height, @NonNull RouteAltitudeLimits limits)
   {
+    limits.profile = null;
     if (width <= 0 || height <= 0)
       return null;
 

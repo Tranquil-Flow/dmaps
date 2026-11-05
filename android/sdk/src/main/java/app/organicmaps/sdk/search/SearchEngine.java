@@ -113,8 +113,15 @@ public enum SearchEngine implements SearchListener, MapSearchListener,
   public boolean search(@NonNull Context context, @NonNull String query, boolean isCategory, long timestamp,
                         boolean hasLocation, double lat, double lon)
   {
-    return nativeRunSearch(query.getBytes(StandardCharsets.UTF_8), isCategory, Language.getKeyboardLocale(context),
-                           timestamp, hasLocation, lat, lon);
+    return search(query, isCategory, Language.getKeyboardLocale(context), timestamp, hasLocation, lat, lon);
+  }
+
+  /** Explicit query locale; preserves the existing native signature and context-based callers. */
+  @MainThread
+  public boolean search(@NonNull String query, boolean isCategory, @NonNull String locale, long timestamp,
+                        boolean hasLocation, double lat, double lon)
+  {
+    return nativeRunSearch(query.getBytes(StandardCharsets.UTF_8), isCategory, locale, timestamp, hasLocation, lat, lon);
   }
 
   @MainThread

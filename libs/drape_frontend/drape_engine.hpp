@@ -183,6 +183,7 @@ public:
   void StartPendingPositionMode();
   void LoseLocation();
   void StopLocationFollow();
+  void StopLocationFollowForPreview();
 
   using TapEventInfoHandler = FrontendRenderer::TapEventInfoHandler;
   void SetTapEventInfoListener(TapEventInfoHandler && fn);

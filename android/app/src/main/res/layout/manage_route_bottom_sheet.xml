@@ -71,6 +71,23 @@
 
   </androidx.constraintlayout.widget.ConstraintLayout>
 
+  <com.google.android.material.button.MaterialButton
+    android:id="@+id/btn__complete_endpoint"
+    style="@style/Widget.Material3.Button.TextButton"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/altitude_chart_container_padding_left"
+    android:visibility="gone"
+    android:text="@string/waypoint_choose_finish" />
+
+  <com.google.android.material.button.MaterialButton
+    android:id="@+id/btn__append_stop"
+    style="@style/Widget.Material3.Button.TextButton"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/altitude_chart_container_padding_left"
+    android:text="@string/waypoint_append_label" />
+
   <androidx.constraintlayout.widget.ConstraintLayout
     android:layout_width="match_parent"
     android:layout_height="@dimen/margin_double_plus"

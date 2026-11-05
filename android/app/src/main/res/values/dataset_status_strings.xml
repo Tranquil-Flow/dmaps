@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- S1 DatasetStatus: shared header text and the one helpful action, Timetable and Journey. -->
+  <string name="dataset_ready">Ready: official timetable valid until %1$s. A map is installed.</string>
+  <string name="dataset_ready_untrusted">Ready, untrusted: user-imported timetable valid until %1$s. A map is installed.</string>
+  <string name="dataset_expiring_today">Timetable ends today (%1$s).</string>
+  <plurals name="dataset_expiring_days">
+    <item quantity="one">Timetable ends in %1$d day (%2$s).</item>
+    <item quantity="other">Timetable ends in %1$d days (%2$s).</item>
+  </plurals>
+  <string name="dataset_untrusted_short">Untrusted user import.</string>
+  <string name="dataset_expired">Timetable expired after %1$s; schedules may be outdated.</string>
+  <string name="dataset_expired_authorization">Pack authorization expired or unavailable. Schedules are unavailable; the pack was not switched to untrusted.</string>
+  <string name="dataset_not_yet_valid">Timetable starts on %1$s; earlier dates are not covered.</string>
+  <string name="dataset_no_pack">No timetable pack installed.</string>
+  <string name="dataset_pack_unavailable">Timetable pack unavailable: its data or trust checks could not be completed. No automatic trust downgrade.</string>
+  <string name="dataset_incompatible">The installed pack supports departure boards only. Journey planning needs a format 2 pack. Your installed pack was not changed.</string>
+  <string name="dataset_map_missing">No offline map is registered. Scheduled departures still work; mapped walking needs an installed map.</string>
+  <string name="dataset_map_unknown">Installed maps could not be checked, so mapped walking is not confirmed. Scheduled departures are unaffected.</string>
+  <string name="dataset_kept_previous">Import failed. The previous pack was kept: valid until %1$s.</string>
+  <string name="dataset_replace_failed_note">The last import failed. The previous pack, if any, was kept.</string>
+  <string name="dataset_action_import">Next: import a timetable pack (Timetable, Import timetable pack).</string>
+  <string name="dataset_action_import_newer">Next: import a newer timetable pack (Timetable, Import timetable pack).</string>
+  <string name="dataset_action_reimport">Next: choose the pack file again (Timetable, Import timetable pack).</string>
+  <string name="dataset_action_install_map">Next: install an offline map in the map manager.</string>
+  <string name="dataset_action_recheck">Next: leave and reopen this screen to check the maps again.</string>
+  <!-- S1 map generation facts: the registered map versions, stated as registered; never a coverage claim. -->
+  <plurals name="dataset_map_versions">
+    <item quantity="one">Installed map data version: %1$s. This does not confirm that the map covers Berlin.</item>
+    <item quantity="other">Installed map data versions: %1$s. This does not confirm that any of them covers Berlin.</item>
+  </plurals>
+  <string name="dataset_map_versions_more">%1$s, plus %2$d older</string>
+  <!-- UX06 manual setup. Arguments: Download Maps, Import timetable pack, User import (untrusted), Official pack labels. -->
+  <string name="dataset_setup_guide">Set up Berlin offline by hand\n1. Map: open “%1$s” and install the Berlin map. The map manager shows each map\'s real size. Downloading needs a connection and starts only when you choose it there.\n2. Timetable: tap “%2$s”, choose “%3$s” (“%4$s” only for a signed official pack), then pick the Berlin timetable file.\n3. Check: this screen then shows the timetable\'s valid dates, whether it is untrusted and whether a map is installed. An installed map does not prove it covers Berlin, and nothing here checks that map and timetable belong together.\nStorage: the space needed depends on the files you choose. While a timetable is imported, the archive, a temporary copy of it, the extracted timetable and the previous pack can exist at the same time. This app cannot know those sizes in advance, so check your free space before you start.</string>
+</resources>

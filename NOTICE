@@ -21,3 +21,25 @@ organizations and licensed in different ways:
 Please refer to their LICENCE, COPYING or NOTICE files for terms of use.
 Some icons files may be copyrighted by (C) 2020 My.com B.V. (Mail.Ru Group)
 See also `data/copyright.html` file for a full list of copyright notices.
+
+Android opening-hours and initial-search-locale adaptations:
+Copyright 2020-2026 Organic Maps Contributors.
+Source reference: https://github.com/organicmaps/organicmaps
+Revision: 6d7c1b39d4e64403865051f31afb61b9e6e1e03d
+Modified for the CoMaps schedule adapter, locale-first week grouping and query lifecycle.
+These adaptations use the Apache-2.0 source license, not a license to donor map binaries.
+
+Android elevation presentation-math and regression adaptations:
+ElevationChartMath and its tests adapt the axis interval/padding and profile-interpolation
+seams from Organic Maps revision 6d7c1b39d4e64403865051f31afb61b9e6e1e03d under Apache-2.0.
+DMaps changes include validated metre-only arrays, explicit missing/invalid results,
+finite outward float bounds, exact-vertex handling and overflow-safe interpolation.
+No donor chart subsystem, ascent/descent changes or map binaries are included.
+
+Retained upstream attribution notice:
+If you use Organic Maps source code or its user interface in your project, please include a visible,
+human-readable mention of the “Organic Maps Project” and a clickable link to https://organicmaps.app.
+To respect the work of all project contributors and to comply with license attribution terms,
+this notice should appear in user-visible locations, such as the product’s “About” and “Main Menu” screens.
+
+For white-label use cases, please contact us at `legal@organicmaps.app`.

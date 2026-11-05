@@ -3,7 +3,6 @@
 #include "search/token_slice.hpp"
 #include "search/utils.hpp"
 
-#include "base/dfa_helpers.hpp"
 
 #include "indexer/feature_data.hpp"
 
@@ -67,29 +66,26 @@ string DebugPrint(ErrorsMade const & errorsMade)
 
 namespace impl
 {
-ErrorsMade GetErrorsMade(QueryParams::Token const & token, strings::UniString const & text, LevenshteinDFA const & dfa)
+ErrorsMade GetErrorsMade(QueryParams::Token const & token, strings::UniString const & text,
+                         LevenshteinDFA::MatchResult const & match)
 {
   if (token.AnyOfSynonyms([&text](strings::UniString const & s) { return text == s; }))
     return ErrorsMade(0);
 
-  auto it = dfa.Begin();
-  strings::DFAMove(it, token.GetOriginal().begin(), token.GetOriginal().end());
-  if (it.Accepts())
-    return ErrorsMade(it.ErrorsMade());
+  if (match.m_accepts)
+    return ErrorsMade(match.m_errorsMade);
 
   return {};
 }
 
 ErrorsMade GetPrefixErrorsMade(QueryParams::Token const & token, strings::UniString const & text,
-                               LevenshteinDFA const & dfa)
+                               LevenshteinDFA::MatchResult const & match)
 {
   if (token.AnyOfSynonyms([&text](strings::UniString const & s) { return StartsWith(text, s); }))
     return ErrorsMade(0);
 
-  auto it = dfa.Begin();
-  strings::DFAMove(it, token.GetOriginal().begin(), token.GetOriginal().end());
-  if (!it.Rejects())
-    return ErrorsMade(it.PrefixErrorsMade());
+  if (!match.m_rejects)
+    return ErrorsMade(match.m_prefixErrorsMade);
 
   return {};
 }
@@ -98,8 +94,6 @@ ErrorsMade GetPrefixErrorsMade(QueryParams::Token const & token, strings::UniStr
 TokensVector::TokensVector(string_view name)
 {
   m_tokens = NormalizeAndTokenizeString(std::move(name));
-
-  Init();
 }
 
 string DebugPrint(NameScore const & score)

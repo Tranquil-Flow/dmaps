@@ -580,6 +580,15 @@ void DrapeEngine::StopLocationFollow()
                                   MessagePriority::Normal);
 }
 
+void DrapeEngine::StopLocationFollowForPreview()
+{
+  using Mode = ChangeMyPositionModeMessage::EChangeType;
+  // Same FIFO priority as StopFollowing/ShowRect, so a following SetModelViewRect is ordered after it.
+  m_threadCommutator->PostMessage(ThreadsCommutator::RenderThread,
+                                  make_unique_dp<ChangeMyPositionModeMessage>(Mode::StopFollowingForPreview),
+                                  MessagePriority::Normal);
+}
+
 void DrapeEngine::FollowRoute(int preferredZoomLevel, int preferredZoomLevel3d, bool enableAutoZoom, bool isArrowGlued,
                               bool allowRouteRotation)
 {

@@ -43,6 +43,8 @@ set(SRC
   limited_priority_queue.hpp
   linked_map.hpp
   logging.cpp
+  thread_log_guard.cpp
+  thread_log_guard.hpp
   logging.hpp
   lower_case.cpp
   lru_cache.hpp

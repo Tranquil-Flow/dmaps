@@ -90,6 +90,7 @@ android {
         applicationId = appId
         minSdk = providers.gradleProperty("propMinSdkVersion").get().toInt()
         targetSdk = providers.gradleProperty("propTargetSdkVersion").get().toInt()
+        testInstrumentationRunner = "app.organicmaps.transit.TransitPilotInstrumentation"
         base.archivesName = "${appName.replace(" ", "")}-${defaultConfig.versionCode!!}"
         ndk.debugSymbolLevel = "full"
         buildConfigField("String", "REVIEW_URL", "\"\"")
@@ -155,6 +156,10 @@ android {
         sourceSets.getByName("debug") {
             resources.srcDir("src/debugArm64/resources")
         }
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 
     lint {
@@ -397,6 +402,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.junit)
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
+    testImplementation(libs.robolectric)
 }
 
 android.applicationVariants.configureEach {

@@ -69,6 +69,10 @@
 
 #include "3party/open-location-code/openlocationcode.h"
 
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1388,6 +1392,92 @@ JNIEXPORT jobjectArray JNICALL Java_app_organicmaps_sdk_Framework_nativeGetRoute
   return CreateJunctionInfoArray(env, result);
 }
 
+// Optional bounded presentation copy; the existing bitmap/statistics path below is unchanged.
+// This does not simplify the raw samples or recalculate route ascent/descent.
+// Fast-math-safe classification restricted to the optional raw presentation copy.
+static bool IsFiniteRouteAltitudeDistance(double const & value)
+{
+  static_assert(sizeof(double) == sizeof(std::uint64_t));
+  static_assert(std::numeric_limits<double>::is_iec559);
+  std::uint64_t bits;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return (bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
+}
+
+static jobject MakeRouteAltitudeData(JNIEnv * env, RoutingManager::DistanceAltitude const & raw)
+{
+  if (env->ExceptionCheck())
+    return nullptr;
+  size_t constexpr kMaxSamples = 4096; // RouteAltitudeData.MAX_SAMPLES.
+  size_t const count = raw.m_distances.size();
+  if (count < 2 || count > kMaxSamples || count != raw.m_altitudes.size())
+    return nullptr;
+  // Classify the stored bits before ANY floating-point comparison. Under fast-math,
+  // an earlier comparison can otherwise make a later finite test redundant.
+  for (double const & distance : raw.m_distances)
+  {
+    if (!IsFiniteRouteAltitudeDistance(distance))
+      return nullptr;
+  }
+  if (raw.m_distances.front() != 0 || raw.m_distances.back() <= 0)
+    return nullptr;
+  for (size_t i = 0; i < count; ++i)
+  {
+    if (raw.m_distances[i] < 0
+        || (i > 0 && raw.m_distances[i] < raw.m_distances[i - 1])
+        || raw.m_altitudes[i] == geometry::kInvalidAltitude)
+      return nullptr;
+  }
+  jsize const size = static_cast<jsize>(count);
+  auto distances = env->NewDoubleArray(size);
+  if (!distances || env->ExceptionCheck())
+    return nullptr;
+  jni::TScopedLocalRef const distancesRef(env, distances);
+  auto heights = env->NewDoubleArray(size);
+  if (!heights || env->ExceptionCheck())
+    return nullptr;
+  jni::TScopedLocalRef const heightsRef(env, heights);
+  std::vector<jdouble> altitudeMetres(raw.m_altitudes.begin(), raw.m_altitudes.end());
+  env->SetDoubleArrayRegion(distances, 0, size, raw.m_distances.data());
+  if (env->ExceptionCheck())
+    return nullptr;
+  env->SetDoubleArrayRegion(heights, 0, size, altitudeMetres.data());
+  if (env->ExceptionCheck())
+    return nullptr;
+  // This optional bridge is infrequent. Local lookup avoids global allocation and poisoned
+  // static initialization on failure; retry normally on a later Java invocation.
+  jni::TScopedLocalClassRef const clazz(env, env->FindClass("app/organicmaps/sdk/routing/RouteAltitudeData"));
+  if (!clazz.get() || env->ExceptionCheck())
+    return nullptr;
+  jmethodID const ctor = env->GetMethodID(clazz.get(), "<init>", "([D[D)V");
+  if (!ctor || env->ExceptionCheck())
+    return nullptr;
+  jobject const result = env->NewObject(clazz.get(), ctor, distances, heights);
+  if (!result || env->ExceptionCheck())
+  {
+    if (result)
+      env->DeleteLocalRef(result);
+    return nullptr; // Preserve the pending Java exception, including OutOfMemoryError.
+  }
+  return result;
+}
+
+// Keep the new optional field separate from the legacy statistics-field initialization.
+static bool SetRouteAltitudeData(JNIEnv * env, jobject limits, jobject profile)
+{
+  if (env->ExceptionCheck() || !limits)
+    return false;
+  jni::TScopedLocalClassRef const clazz(env, env->GetObjectClass(limits));
+  if (!clazz.get() || env->ExceptionCheck())
+    return false;
+  jfieldID const field = env->GetFieldID(
+      clazz.get(), "profile", "Lapp/organicmaps/sdk/routing/RouteAltitudeData;");
+  if (!field || env->ExceptionCheck())
+    return false;
+  env->SetObjectField(limits, field, profile);
+  return !env->ExceptionCheck();
+}
+
 JNIEXPORT jintArray JNICALL Java_app_organicmaps_sdk_Framework_nativeGenerateRouteAltitudeChartBits(
     JNIEnv * env, jclass, jint width, jint height, jobject routeAltitudeLimits)
 {
@@ -1397,6 +1487,11 @@ JNIEXPORT jintArray JNICALL Java_app_organicmaps_sdk_Framework_nativeGenerateRou
     LOG(LWARNING, ("Can't get distance to route points and altitude."));
     return nullptr;
   }
+
+  // Capture BEFORE Simplify: chart samples are raw; legacy stats still use Simplify below.
+  jni::TScopedLocalRef const profile(env, MakeRouteAltitudeData(env, altitudes));
+  if (env->ExceptionCheck())
+    return nullptr;
 
   altitudes.Simplify();
 
@@ -1449,6 +1544,9 @@ JNIEXPORT jintArray JNICALL Java_app_organicmaps_sdk_Framework_nativeGenerateRou
   static jfieldID const isMetricUnitsField = env->GetFieldID(routeAltitudeLimitsClass, "isMetricUnits", "Z");
   ASSERT(isMetricUnitsField, ());
   env->SetBooleanField(routeAltitudeLimits, isMetricUnitsField, units == Units::Metric);
+
+  if (!SetRouteAltitudeData(env, routeAltitudeLimits, profile.get()))
+    return nullptr;
 
   size_t const imageRGBADataSize = imageRGBAData.size();
   ASSERT_NOT_EQUAL(imageRGBADataSize, 0,

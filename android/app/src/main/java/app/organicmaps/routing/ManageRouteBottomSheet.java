@@ -11,6 +11,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.Toast;
+import app.organicmaps.MwmActivity;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.ItemTouchHelper;
@@ -21,6 +23,7 @@ import app.organicmaps.R;
 import app.organicmaps.sdk.Framework;
 import app.organicmaps.sdk.bookmarks.data.MapObject;
 import app.organicmaps.sdk.routing.RouteMarkData;
+import app.organicmaps.sdk.routing.RouteMarkType;
 import app.organicmaps.sdk.routing.RoutingController;
 import app.organicmaps.util.UiUtils;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -35,6 +38,8 @@ public class ManageRouteBottomSheet
   ManageRouteAdapter mManageRouteAdapter;
   ItemTouchHelper mTouchHelper;
   ImageView mMyLocationImageView;
+  private boolean mPartialRoute;
+
 
   @Override
   public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState)
@@ -43,6 +48,9 @@ public class ManageRouteBottomSheet
 
     MaterialButton cancelButton = v.findViewById(R.id.btn__cancel);
     cancelButton.setOnClickListener(this);
+
+    MaterialButton appendButton = v.findViewById(R.id.btn__append_stop);
+    appendButton.setOnClickListener(this);
 
     MaterialButton planButton = v.findViewById(R.id.btn__plan);
     planButton.setOnClickListener(this);
@@ -54,7 +62,20 @@ public class ManageRouteBottomSheet
     LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
     manageRouteList.setLayoutManager(layoutManager);
 
-    mManageRouteAdapter = new ManageRouteAdapter(getContext(), Framework.nativeGetRoutePoints(), this);
+    RouteMarkData[] points = Framework.nativeGetRoutePoints();
+    mPartialRoute = points.length < 2;
+    MaterialButton completeButton = v.findViewById(R.id.btn__complete_endpoint);
+    completeButton.setOnClickListener(this);
+    boolean oneEndpoint = points.length == 1 && (points[0].mPointType == RouteMarkType.Start
+                                                || points[0].mPointType == RouteMarkType.Finish);
+    UiUtils.showIf(oneEndpoint, completeButton);
+    if (oneEndpoint)
+      completeButton.setText(points[0].mPointType == RouteMarkType.Start
+                                ? R.string.waypoint_choose_finish : R.string.waypoint_choose_start);
+    UiUtils.showIf(!mPartialRoute, appendButton, planButton);
+    if (mPartialRoute)
+      UiUtils.hide(mMyLocationImageView);
+    mManageRouteAdapter = new ManageRouteAdapter(getContext(), points, this);
 
     manageRouteList.setAdapter(mManageRouteAdapter);
 
@@ -107,8 +128,30 @@ public class ManageRouteBottomSheet
       // Close dialog if 'Cancel' button is pressed.
       dismiss();
     }
+    else if (buttonId == R.id.btn__complete_endpoint)
+    {
+      if (!(requireActivity() instanceof MwmActivity))
+        return;
+      RouteMarkData[] displayed = mManageRouteAdapter.getRoutePoints().toArray(new RouteMarkData[0]);
+      if (((MwmActivity) requireActivity()).onCompleteMissingEndpoint(displayed))
+        dismiss();
+      else
+        Toast.makeText(requireContext(), R.string.waypoint_endpoint_unavailable, Toast.LENGTH_LONG).show();
+    }
+    else if (buttonId == R.id.btn__append_stop)
+    {
+      if (!(requireActivity() instanceof MwmActivity))
+        return;
+      RouteMarkData[] displayed = mManageRouteAdapter.getRoutePoints().toArray(new RouteMarkData[0]);
+      if (((MwmActivity) requireActivity()).onAppendIntermediateRoutePoint(displayed))
+        dismiss();
+      else
+        Toast.makeText(requireContext(), R.string.waypoint_append_unavailable, Toast.LENGTH_LONG).show();
+    }
     else if (buttonId == R.id.image_my_location)
     {
+      if (mPartialRoute)
+        return;
       // Get current location.
       MapObject myLocation = MwmApplication.from(requireContext()).getLocationHelper().getMyPosition();
 
@@ -118,6 +161,8 @@ public class ManageRouteBottomSheet
     }
     else if (buttonId == R.id.btn__plan)
     {
+      if (mPartialRoute || mManageRouteAdapter.getRoutePoints().size() < 2)
+        return;
       // Get route points from adapter.
       ArrayList<RouteMarkData> newRoutePoints = mManageRouteAdapter.getRoutePoints();
 
@@ -146,6 +191,18 @@ public class ManageRouteBottomSheet
   }
 
   @Override
+  public void onRoutePointReplace(int intermediateIndex)
+  {
+    if (!(requireActivity() instanceof MwmActivity))
+      return;
+    RouteMarkData[] displayed = mManageRouteAdapter.getRoutePoints().toArray(new RouteMarkData[0]);
+    if (((MwmActivity) requireActivity()).onReplaceIntermediateRoutePoint(displayed, intermediateIndex))
+      dismiss(); // No draft was changed: canceling search leaves the original route intact.
+    else
+      Toast.makeText(requireContext(), R.string.waypoint_replace_unavailable, Toast.LENGTH_LONG).show();
+  }
+
+  @Override
   public void startDrag(RecyclerView.ViewHolder viewHolder)
   {
     // Start dragging.
@@ -155,6 +212,11 @@ public class ManageRouteBottomSheet
   @Override
   public void showMyLocationIcon(boolean showMyLocationIcon)
   {
+    if (mPartialRoute)
+    {
+      UiUtils.hide(mMyLocationImageView);
+      return; // No location lookup in single-endpoint management.
+    }
     // Get current location.
     MapObject myLocation = MwmApplication.from(requireContext()).getLocationHelper().getMyPosition();
 

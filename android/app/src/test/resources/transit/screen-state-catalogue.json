@@ -1,0 +1,160 @@
+{
+ "schema": "dmaps.screen-state-catalogue/1",
+ "about": "SYSTEM S7. Stable ids for meaningful UI states. 'extension' marks ids beyond the S7 text examples (J0-J8, T0-T1); owner may rename. Predicates are over JourneyViewModel.State / TimetableViewModel.ScreenState; classifier = ScreenStateCatalogue (test tree).",
+ "screens": {
+  "journey": [
+   {
+    "id": "J0",
+    "name": "empty",
+    "predicate": "info valid, no endpoints, no candidates, no result",
+    "classified": true
+   },
+   {
+    "id": "J1",
+    "name": "origin chosen",
+    "predicate": "from != null, to == null",
+    "classified": true
+   },
+   {
+    "id": "J1D",
+    "name": "destination chosen only (extension to S7 text)",
+    "predicate": "from == null, to != null",
+    "classified": true
+   },
+   {
+    "id": "J2",
+    "name": "both stations, platforms not narrowed",
+    "predicate": "both chosen; at least one selection has >1 platform",
+    "classified": true
+   },
+   {
+    "id": "J3",
+    "name": "platforms chosen",
+    "predicate": "both chosen and each narrowed to exactly one platform; no result",
+    "classified": true
+   },
+   {
+    "id": "JC",
+    "name": "candidate list shown (extension)",
+    "predicate": "candidates != null, no result",
+    "classified": true
+   },
+   {
+    "id": "J4",
+    "name": "scheduled result",
+    "predicate": "result != null, result.mapSnapshotId == null",
+    "classified": true
+   },
+   {
+    "id": "J5",
+    "name": "walking result",
+    "predicate": "result != null, result.mapSnapshotId != null",
+    "classified": true
+   },
+   {
+    "id": "J6",
+    "name": "street-map preview open",
+    "predicate": "map-side: WalkingMapPreviewSession.isOpen(); not observable from JourneyViewModel",
+    "classified": false
+   },
+   {
+    "id": "J7",
+    "name": "street-map preview expired, return kept",
+    "predicate": "map-side: preview line gone after 5 min, return token kept (owner decision 10-28 option b)",
+    "classified": false
+   },
+   {
+    "id": "J8",
+    "name": "returned from map",
+    "predicate": "message == journey_return_replan, endpoints restored, result == null",
+    "classified": true
+   },
+   {
+    "id": "JD",
+    "name": "departed (extension)",
+    "predicate": "message == journey_departed, endpoints kept, result == null",
+    "classified": true
+   },
+   {
+    "id": "JX",
+    "name": "retired with changed/reselect message (extension)",
+    "predicate": "info == null and message in {journey_changed, journey_return_reselect}",
+    "classified": true
+   },
+   {
+    "id": "JS",
+    "name": "suspended between pause and resume (extension)",
+    "predicate": "info == null, message == journey_choose",
+    "classified": true
+   },
+   {
+    "id": "JB",
+    "name": "busy overlay (extension)",
+    "predicate": "busy == true; overlays any other state",
+    "classified": true
+   },
+   {
+    "id": "JN",
+    "name": "no pack (extension)",
+    "predicate": "message == transit_no_pack",
+    "classified": true
+   },
+   {
+    "id": "JF",
+    "name": "pack format cannot journey-plan (extension)",
+    "predicate": "message == journey_format_required",
+    "classified": true
+   }
+  ],
+  "timetable": [
+   {
+    "id": "T0",
+    "name": "no pack",
+    "predicate": "status NO_PACK",
+    "classified": true
+   },
+   {
+    "id": "T1",
+    "name": "board",
+    "predicate": "READY with selectedStop != null and board non-empty",
+    "classified": true
+   },
+   {
+    "id": "T2",
+    "name": "candidates",
+    "predicate": "READY with selectedStop == null and candidates non-empty",
+    "classified": true
+   },
+   {
+    "id": "T3",
+    "name": "pack ready, nothing chosen (extension)",
+    "predicate": "READY/IDLE, packPresent, no selection, no candidates",
+    "classified": true
+   },
+   {
+    "id": "T4",
+    "name": "no results (extension)",
+    "predicate": "status NO_RESULTS (empty search, or selected stop with empty board)",
+    "classified": true
+   },
+   {
+    "id": "T5",
+    "name": "working (extension)",
+    "predicate": "status WORKING",
+    "classified": true
+   },
+   {
+    "id": "T6",
+    "name": "error / pack unavailable (extension)",
+    "predicate": "status ERROR",
+    "classified": true
+   },
+   {
+    "id": "T7",
+    "name": "import failed, previous pack kept (extension)",
+    "predicate": "importFailed == true",
+    "classified": true
+   }
+  ]
+ }
+}

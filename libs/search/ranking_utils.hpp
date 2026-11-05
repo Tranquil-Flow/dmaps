@@ -100,11 +100,11 @@ namespace impl
 {
 // Returns the minimum number of errors needed to match |text| with |token|.
 // If it's not possible in accordance with GetMaxErrorsForToken(|text|), returns kInfiniteErrors.
-/// @param[in]  dfa DFA for |text|
+/// @param[in] match One-input automaton result for |text| and token.GetOriginal().
 ErrorsMade GetErrorsMade(QueryParams::Token const & token, strings::UniString const & text,
-                         strings::LevenshteinDFA const & dfa);
+                         strings::LevenshteinDFA::MatchResult const & match);
 ErrorsMade GetPrefixErrorsMade(QueryParams::Token const & token, strings::UniString const & text,
-                               strings::LevenshteinDFA const & dfa);
+                               strings::LevenshteinDFA::MatchResult const & match);
 }  // namespace impl
 
 // The order and numeric values are important here. Please, check all use-cases before changing this enum.
@@ -186,24 +186,18 @@ std::string DebugPrint(NameScores const & scores);
 class TokensVector
 {
   std::vector<strings::UniString> m_tokens;
-  std::vector<strings::LevenshteinDFA> m_dfas;
-
-private:
-  void Init() { m_dfas.resize(m_tokens.size()); }
 
 public:
   TokensVector() = default;
   explicit TokensVector(std::string_view name);
-  explicit TokensVector(std::vector<strings::UniString> && tokens) : m_tokens(std::move(tokens)) { Init(); }
+  explicit TokensVector(std::vector<strings::UniString> && tokens) : m_tokens(std::move(tokens)) {}
 
   std::vector<strings::UniString> const & GetTokens() const { return m_tokens; }
   size_t Size() const { return m_tokens.size(); }
   strings::UniString const & Token(size_t i) const { return m_tokens[i]; }
-  strings::LevenshteinDFA const & DFA(size_t i)
+  strings::LevenshteinDFA::MatchResult Match(size_t i, strings::UniString const & input) const
   {
-    if (m_dfas[i].IsEmpty())
-      m_dfas[i] = BuildLevenshteinDFA(m_tokens[i]);
-    return m_dfas[i];
+    return MatchLevenshteinToken(m_tokens[i], input);
   }
 };
 
@@ -287,12 +281,13 @@ NameScores GetNameScores(TokensVector & tokens, uint8_t lang, Slice const & slic
 
       // Count the errors. If GetErrorsMade finds a match, count it towards
       // the matched length and check against the prior best.
-      auto errorsMade = impl::GetErrorsMade(slice.Get(i), tokens.Token(tIdx), tokens.DFA(tIdx));
+      auto const match = tokens.Match(tIdx, slice.Get(i).GetOriginal());
+      auto errorsMade = impl::GetErrorsMade(slice.Get(i), tokens.Token(tIdx), match);
 
       // Also, check like prefix, if we've got token-like matching errors.
       if (!errorsMade.IsZero() && slice.IsPrefix(i))
       {
-        auto const prefixErrors = impl::GetPrefixErrorsMade(slice.Get(i), tokens.Token(tIdx), tokens.DFA(tIdx));
+        auto const prefixErrors = impl::GetPrefixErrorsMade(slice.Get(i), tokens.Token(tIdx), match);
         if (prefixErrors.IsBetterThan(errorsMade))
         {
           // NameScore::PREFIX with less errors is better than NameScore::FULL_MATCH.
@@ -341,7 +336,8 @@ NameScores GetNameScores(TokensVector & tokens, uint8_t lang, Slice const & slic
       {
         while (++iToken < tokenCount)
         {
-          auto const errorsMade = impl::GetErrorsMade(slice.Get(iSlice), tokens.Token(iToken), tokens.DFA(iToken));
+          auto const errorsMade = impl::GetErrorsMade(slice.Get(iSlice), tokens.Token(iToken),
+                                                     tokens.Match(iToken, slice.Get(iSlice).GetOriginal()));
           if (errorsMade.IsValid())
           {
             totalErrorsMade += errorsMade;

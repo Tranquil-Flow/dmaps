@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "state": "source-reviewed and frozen; owner/field review pending",
+  "pack_database_sha256": "e73fe1c09e54a9e4457953f573446f5f3ac70aa4b4f664a0ef83020ebad4c324",
+  "case_count": 16,
+  "cases": [
+    {
+      "case_id": "legacy-01",
+      "kind": "retained previously measured stop",
+      "query": "Berlin Hauptbahnhof",
+      "stop": {
+        "id": 39882,
+        "source_id": "de:11000:900003200:1:50",
+        "name": "S+U Berlin Hauptbahnhof",
+        "platform": "1",
+        "parent_id": 468,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-02",
+      "kind": "retained previously measured stop",
+      "query": "Alexanderplatz",
+      "stop": {
+        "id": 40414,
+        "source_id": "de:11000:900100003:2:52",
+        "name": "S+U Alexanderplatz Bhf (Berlin)",
+        "platform": "",
+        "parent_id": 4957,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-03",
+      "kind": "retained previously measured stop",
+      "query": "Frankfurter Allee",
+      "stop": {
+        "id": 40585,
+        "source_id": "de:11000:900120001:1:50",
+        "name": "S+U Frankfurter Allee (Berlin)",
+        "platform": "1",
+        "parent_id": 5481,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-04",
+      "kind": "retained previously measured stop",
+      "query": "Zoologischer Garten",
+      "stop": {
+        "id": 1203,
+        "source_id": "de:11000:900023172::1",
+        "name": "S+U Zoologischer Garten/Jebensstr. (Berlin)",
+        "platform": "Pos. 1",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-05",
+      "kind": "retained previously measured stop",
+      "query": "Potsdam Hauptbahnhof",
+      "stop": {
+        "id": 9644,
+        "source_id": "de:12054:900230005::1",
+        "name": "S Potsdam Hauptbahnhof/Nord ILB",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-06",
+      "kind": "retained previously measured stop",
+      "query": "Brandenburg, Hauptbahnhof",
+      "stop": {
+        "id": 41227,
+        "source_id": "de:12051:900275110:1:50",
+        "name": "Brandenburg, Hauptbahnhof",
+        "platform": "1",
+        "parent_id": 8353,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-07",
+      "kind": "retained previously measured stop",
+      "query": "Cottbus Hauptbahnhof",
+      "stop": {
+        "id": 41270,
+        "source_id": "de:12052:900470000:1:50",
+        "name": "Cottbus, Hauptbahnhof",
+        "platform": "1",
+        "parent_id": 8740,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-08",
+      "kind": "retained previously measured stop",
+      "query": "Eberswalde Hauptbahnhof",
+      "stop": {
+        "id": 41384,
+        "source_id": "de:12060:900350127:1:50",
+        "name": "Eberswalde, Hauptbahnhof",
+        "platform": "1",
+        "parent_id": 10195,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-09",
+      "kind": "retained previously measured stop",
+      "query": "Wittenberge",
+      "stop": {
+        "id": 21411,
+        "source_id": "de:12069:900222221::1",
+        "name": "Niemegk, Wittenberger Str.",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "query Wittenberge previously selected Niemegk, Wittenberger Str.; do not call this intended-town search success",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "legacy-10",
+      "kind": "retained previously measured stop",
+      "query": "Bad Belzig",
+      "stop": {
+        "id": 41801,
+        "source_id": "de:12069:900220143:1:50",
+        "name": "Bad Belzig, Bahnhof",
+        "platform": "1",
+        "parent_id": 20277,
+        "location_type": 0
+      },
+      "now": "2026-10-08T12:00:00Z",
+      "selection_review": "explicit stop/platform selection required",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "mode-tram",
+      "kind": "explicit tram platform",
+      "line": "M4",
+      "route_type": 900,
+      "stop": {
+        "id": 4944,
+        "source_id": "de:11000:900100002::1",
+        "name": "S Hackescher Markt (Berlin)",
+        "platform": "Pos. 3",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "mode-metro",
+      "kind": "explicit metro platform",
+      "line": "U5",
+      "route_type": 400,
+      "stop": {
+        "id": 39897,
+        "source_id": "de:11000:900003201::1",
+        "name": "S+U Berlin Hauptbahnhof",
+        "platform": "1 (U5)",
+        "parent_id": 468,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "mode-bus",
+      "kind": "explicit bus platform",
+      "line": "100",
+      "route_type": 700,
+      "stop": {
+        "id": 178,
+        "source_id": "070101020309",
+        "name": "Berlin, Kleiner Stern",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "mode-ferry",
+      "kind": "explicit ferry platform",
+      "line": "F10",
+      "route_type": 1000,
+      "stop": {
+        "id": 1996,
+        "source_id": "de:11000:900039102::7",
+        "name": "Alt-Kladow (Berlin)",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "platform-pair-1",
+      "kind": "same-name opposite-platform identity",
+      "stop": {
+        "id": 5537,
+        "source_id": "de:11000:900120009::3",
+        "name": "U Samariterstr. (Berlin)",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    },
+    {
+      "case_id": "platform-pair-2",
+      "kind": "same-name opposite-platform identity",
+      "stop": {
+        "id": 5538,
+        "source_id": "de:11000:900120009::4",
+        "name": "U Samariterstr. (Berlin)",
+        "platform": "",
+        "parent_id": null,
+        "location_type": 0
+      },
+      "now": "2026-10-14T12:00:00Z",
+      "host_query": "not-run",
+      "device_walkthrough": "not-run"
+    }
+  ]
+}

@@ -82,6 +82,9 @@ import app.organicmaps.routing.RoutingErrorDialogFragment;
 import app.organicmaps.routing.RoutingPlanFragment;
 import app.organicmaps.routing.RoutingPlanInplaceController;
 import app.organicmaps.sdk.ChoosePositionMode;
+import app.organicmaps.sdk.transit.WalkingMapOverlay;
+import app.organicmaps.transit.WalkingMapPreviewController;
+import app.organicmaps.transit.WalkingMapPreviewSession;
 import app.organicmaps.sdk.Framework;
 import app.organicmaps.sdk.Map;
 import app.organicmaps.sdk.MapController;
@@ -173,6 +176,116 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @SuppressWarnings("NotNullFieldNotInitialized")
   @NonNull
   private MapController mMapController;
+  private WalkingMapPreviewController mWalkingPreview;
+  private android.widget.LinearLayout mWalkingPreviewPanel;
+  private boolean mWalkingMapResumed;
+  private boolean mWalkingReturnPending;
+
+  private void closeWalkingPreview()
+  {
+    mWalkingReturnPending = false;
+    WalkingMapPreviewController old = mWalkingPreview;
+    mWalkingPreview = null;
+    if (old != null) old.close();
+    if (mWalkingPreviewPanel != null) {
+      if (mWalkingPreviewPanel.getParent() instanceof android.view.ViewGroup)
+        ((android.view.ViewGroup) mWalkingPreviewPanel.getParent()).removeView(mWalkingPreviewPanel);
+      mWalkingPreviewPanel = null;
+    }
+    Intent intent = getIntent();
+    if (intent != null) WalkingMapPreviewSession.cancelPending(intent.getStringExtra(WalkingMapPreviewSession.EXTRA_TOKEN));
+  }
+
+  private void returnFromWalkingPreview()
+  {
+    if (mWalkingReturnPending || mWalkingPreviewPanel == null) return;
+    mWalkingReturnPending = true;
+    android.widget.LinearLayout panel = mWalkingPreviewPanel;
+    java.util.function.Consumer<String> returned = token -> {
+      // Pause/new Intent/close owns cancellation, including a late worker validation answer.
+      if (!mWalkingReturnPending || !mWalkingMapResumed || mWalkingPreviewPanel != panel) {
+        WalkingMapPreviewSession.cancelReturn(token); return;
+      }
+      closeWalkingPreview();
+      try {
+        startActivity(new Intent(this, app.organicmaps.transit.JourneyActivity.class)
+            .putExtra(WalkingMapPreviewSession.EXTRA_RETURN_TOKEN, token == null ? "" : token)
+            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+      } catch (RuntimeException unavailable) { WalkingMapPreviewSession.cancelReturn(token); }
+    };
+    if (mWalkingPreview == null) returned.accept(null);
+    else mWalkingPreview.prepareReturn(returned);
+  }
+
+  private void openWalkingPreview(String token)
+  {
+    WalkingMapPreviewSession session = WalkingMapPreviewSession.claim(token);
+    closeWalkingPreview();
+    if (session == null) return;
+    android.widget.LinearLayout panel = new android.widget.LinearLayout(this);
+    panel.setOrientation(android.widget.LinearLayout.VERTICAL);
+    panel.setTag("dmaps-walking-map-panel");
+    panel.setSaveEnabled(false);
+    int pad = Math.round(8 * getResources().getDisplayMetrics().density);
+    panel.setPadding(pad, pad, pad, pad);
+    android.util.TypedValue background = new android.util.TypedValue();
+    getTheme().resolveAttribute(android.R.attr.colorBackground, background, true);
+    panel.setBackgroundColor(background.data);
+    ViewCompat.setOnApplyWindowInsetsListener(panel, (view, insets) -> {
+      androidx.core.graphics.Insets bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+      view.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad); return insets;
+    });
+    android.widget.TextView status = new android.widget.TextView(this);
+    status.setText(R.string.transit_working); status.setTextSize(16); status.setSaveEnabled(false);
+    status.setTag("dmaps-walking-map-status"); panel.addView(status);
+    android.widget.ScrollView instructions = new android.widget.ScrollView(this);
+    android.widget.TextView steps = new android.widget.TextView(this);
+    steps.setText(session.instructions(this)); steps.setTextSize(16); steps.setSaveEnabled(false);
+    instructions.setSaveEnabled(false); instructions.addView(steps); instructions.setVisibility(View.GONE);
+    android.widget.LinearLayout buttons = new android.widget.LinearLayout(this);
+    android.widget.Button directions = new android.widget.Button(this);
+    directions.setText(R.string.journey_walk_directions); directions.setEnabled(false);
+    app.organicmaps.transit.WalkingMapPreviewController.bindInstructionsToggle(directions,instructions);
+    buttons.addView(directions, new android.widget.LinearLayout.LayoutParams(0, -2, 1));
+    android.widget.Button back = new android.widget.Button(this);
+    back.setText(R.string.journey_map_back); back.setOnClickListener(v -> returnFromWalkingPreview());
+    buttons.addView(back, new android.widget.LinearLayout.LayoutParams(0, -2, 1)); panel.addView(buttons);
+    panel.addView(instructions, new android.widget.LinearLayout.LayoutParams(-1, Math.round(180 * getResources().getDisplayMetrics().density)));
+    ((android.view.ViewGroup) getWindow().getDecorView()).addView(panel,
+        new android.widget.FrameLayout.LayoutParams(-1, -2, android.view.Gravity.TOP));
+    ViewCompat.requestApplyInsets(panel); mWalkingPreviewPanel = panel;
+    mWalkingPreview = new WalkingMapPreviewController(session, new WalkingMapPreviewController.Host() {
+      public boolean ready() { return mWalkingMapResumed && Map.isEngineCreated() && mMapController.isRenderingActive(); }
+      public boolean idle() {
+        RoutingController route = RoutingController.get();
+        return ChoosePositionMode.get() == ChoosePositionMode.None && !route.isPlanning() && !route.isNavigating()
+            && !route.isBuilding() && !route.isBuilt() && !route.hasSavedRoute()
+            && !UiUtils.isVisible(mSearchController.getToolbar()) && (mPanelAnimator == null || !mPanelAnimator.isVisible());
+      }
+      public WalkingMapPreviewController.Overlay show(double[] geometry) {
+        WalkingMapOverlay line = WalkingMapOverlay.show(geometry);
+        if (line == null) return null;
+        return new WalkingMapPreviewController.Overlay() {
+          public boolean isCurrent() { return line.isCurrent(); }
+          public void close() { line.close(); }
+        };
+      }
+      public void status(int message) { status.setText(getString(message) + (message == R.string.journey_map_scope ? "\n" + session.trust(MwmActivity.this) : "")); directions.setEnabled(message == R.string.journey_map_scope); }
+      public void closed(int message) {
+        // The source and line are already retired. Keep only an error/Back panel so a
+        // refused preview cannot send Back through the ordinary navigation-cancel path.
+        if (mWalkingPreviewPanel == panel && message != 0 && mWalkingMapResumed) {
+          // Keep the closed controller: its session still answers Back with the retained platforms.
+          steps.setText(""); instructions.setVisibility(View.GONE);
+          directions.setEnabled(false); status.setText(message); return;
+        }
+        if (panel.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) panel.getParent()).removeView(panel);
+        if (mWalkingPreviewPanel == panel) { mWalkingPreviewPanel = null; mWalkingPreview = null; }
+      }
+    });
+    if (mWalkingMapResumed) mWalkingPreview.resume();
+  }
+
 
   private View mPointChooser;
   private MaterialToolbar mPointChooserToolbar;
@@ -273,6 +386,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Keep
   public void onRenderingInitializationFinished()
   {
+    // Slice C: first useful map content. The platform records only the first call per launch.
+    reportFullyDrawn();
     ThemeSwitcher.INSTANCE.restart(true);
 
     if (RoutingController.get().isPlanning())
@@ -304,6 +419,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
     if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false))
       return;
     intent.putExtra(EXTRA_CONSUMED, true);
+    String walkingToken = intent.getStringExtra(WalkingMapPreviewSession.EXTRA_TOKEN);
+    if (walkingToken != null) { openWalkingPreview(walkingToken); return; }
 
     final long categoryId = intent.getLongExtra(EXTRA_CATEGORY_ID, -1);
     final long bookmarkId = intent.getLongExtra(EXTRA_BOOKMARK_ID, -1);
@@ -1169,6 +1286,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   protected void onNewIntent(Intent intent)
   {
+    closeWalkingPreview();
     setIntent(intent);
     super.onNewIntent(intent);
     if (mMapController.isRenderingActive())
@@ -1202,6 +1320,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
     refreshLightStatusBar();
 
     MwmApplication.from(this).getSensorHelper().addListener(this);
+    mWalkingMapResumed = true;
+    if (mWalkingPreview != null) mWalkingPreview.resume();
   }
 
   @Override
@@ -1214,6 +1334,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   protected void onPause()
   {
+    mWalkingMapResumed = false;
+    closeWalkingPreview();
     if (mOnmapDownloader != null)
       mOnmapDownloader.onPause();
     MwmApplication.from(this).getSensorHelper().removeListener(this);
@@ -1266,6 +1388,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   protected void onSafeDestroy()
   {
+    closeWalkingPreview();
     super.onSafeDestroy();
     mLocationPermissionRequest.unregister();
     mLocationPermissionRequest = null;
@@ -1282,6 +1405,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   public void onBackPressed()
   {
+    if (mWalkingPreviewPanel != null) { returnFromWalkingPreview(); return; }
     final RoutingController routingController = RoutingController.get();
     if (!closeBottomSheet(MAIN_MENU_ID) && !closeBottomSheet(LAYERS_MENU_ID) && !collapseNavMenu() && !closePlacePage()
         && !closeSearchToolbar(true, true) && !closeSidePanel() && !closePositionChooser()
@@ -2212,6 +2336,37 @@ public class MwmActivity extends BaseMwmFragmentActivity
     RoutingController.get().waitForPoiPick(pointType);
     closeSearchToolbar(true, true);
     showSearch("");
+  }
+
+  /** Uses the existing phone/tablet search picker without changing endpoint search semantics. */
+  public boolean onReplaceIntermediateRoutePoint(app.organicmaps.sdk.routing.RouteMarkData[] expectedPoints,
+                                                int intermediateIndex)
+  {
+    if (!RoutingController.get().waitForIntermediatePointReplacement(expectedPoints, intermediateIndex))
+      return false;
+    closeSearchToolbar(true, true);
+    showSearch("");
+    return true;
+  }
+
+  /** Explicit single-endpoint completion, separate from ordinary Start/Finish search. */
+  public boolean onCompleteMissingEndpoint(app.organicmaps.sdk.routing.RouteMarkData[] expectedPoints)
+  {
+    if (!RoutingController.get().waitForMissingEndpoint(expectedPoints))
+      return false;
+    closeSearchToolbar(true, true);
+    showSearch("");
+    return true;
+  }
+
+  /** Explicit append reuses the existing phone/tablet picker and Intermediate cancellation path. */
+  public boolean onAppendIntermediateRoutePoint(app.organicmaps.sdk.routing.RouteMarkData[] expectedPoints)
+  {
+    if (!RoutingController.get().waitForIntermediatePointAppend(expectedPoints))
+      return false;
+    closeSearchToolbar(true, true);
+    showSearch("");
+    return true;
   }
 
   @Override
