@@ -299,7 +299,9 @@ void IndexRouter::ClearState()
 {
   m_roadGraph.ClearState();
   m_directionsEngine->Clear();
-  m_dataSource.FreeHandles();
+  // The retained graph's geometry loaders read through these handles.
+  if (!m_retainWorldGraph)
+    m_dataSource.FreeHandles();
 }
 
 bool IndexRouter::FindClosestProjectionToRoad(m2::PointD const & point, m2::PointD const & direction, double radius,
@@ -546,7 +548,23 @@ RouterResultCode IndexRouter::DoCalculateRoute(Checkpoints const & checkpoints, 
     return RouterResultCode::NeedMoreMaps;
 
   TrafficStash::Guard guard(m_trafficStash);
-  unique_ptr<WorldGraph> graph = MakeWorldGraph();
+  unique_ptr<WorldGraph> ownedGraph;
+  WorldGraph * graph = nullptr;
+  if (m_retainWorldGraph)
+  {
+    auto const options = RoutingOptions::LoadOptionsFromSettings(m_vehicleType);
+    if (!m_retainedWorldGraph || options.GetOptions() != m_retainedRoutingOptions.GetOptions())
+    {
+      m_retainedWorldGraph = MakeWorldGraph();
+      m_retainedRoutingOptions = options;
+    }
+    graph = m_retainedWorldGraph.get();
+  }
+  else
+  {
+    ownedGraph = MakeWorldGraph();
+    graph = ownedGraph.get();
+  }
 
   vector<Segment> segments;
 

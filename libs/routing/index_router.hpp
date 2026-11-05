@@ -10,8 +10,10 @@
 #include "routing/road_graph.hpp"
 #include "routing/router.hpp"
 #include "routing/routing_callbacks.hpp"
+#include "routing/routing_options.hpp"
 #include "routing/segment.hpp"
 #include "routing/segmented_route.hpp"
+#include "routing/world_graph.hpp"
 
 #include "routing_common/vehicle_model.hpp"
 
@@ -93,6 +95,16 @@ public:
   void SetCurrentTimeGetter(T && getter)
   {
     m_currentTimeGetter = std::forward<T>(getter);
+  }
+
+  /// Keep one world graph across routes instead of reloading each mwm's routing section per route.
+  /// The graph holds the time getter set at its creation, so a retaining caller must set a getter
+  /// that reads its current time once, before the first route. Off by default; rebuilt when the
+  /// saved routing options change.
+  void SetRetainWorldGraph(bool retain)
+  {
+    m_retainWorldGraph = retain;
+    m_retainedWorldGraph.reset();
   }
 
 private:
@@ -289,5 +301,10 @@ private:
   CountryParentNameGetterFn m_countryParentNameGetterFn;
 
   TimeGetterT m_currentTimeGetter;
+
+  bool m_retainWorldGraph = false;
+  RoutingOptions m_retainedRoutingOptions;
+  // Last member: it reads m_dataSource and m_estimator, so it must be destroyed before them.
+  std::unique_ptr<WorldGraph> m_retainedWorldGraph;
 };
 }  // namespace routing

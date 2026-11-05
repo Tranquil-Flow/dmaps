@@ -11,6 +11,7 @@
 #include "geometry/mercator.hpp"
 #include "monocypher.h"
 #include <array>
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -137,6 +138,8 @@ struct OfflineWalkingProvider::Impl
   MwmSet::MwmHandle held;
   std::shared_ptr<NumMwmIds> ids=std::make_shared<NumMwmIds>();
   m2::RectD bounds;
+  // Read lazily by conditional road access through the retained graph; set by Query before routing.
+  std::atomic<time_t> departure{0};
   std::unique_ptr<IndexRouter> router;
 
   Impl(platform::LocalCountryFile const & input,std::string const & cache,OfflineWalkingProvider::SnapshotMode mode,uint64_t copyByteBudget):directory(cache),name(input.GetCountryName()){
@@ -169,6 +172,8 @@ struct OfflineWalkingProvider::Impl
     router=std::make_unique<IndexRouter>(VehicleType::Pedestrian,true,
       [](std::string const &){return std::string();},[this](m2::PointD const & p){return bounds.IsPointInside(p)?name:std::string();},
       [this](std::string const &){return bounds;},ids,std::move(tree),traffic,source);
+    // Replanning issues several short queries; each would otherwise reload this map's whole routing section.
+    router->SetCurrentTimeGetter([this]{return departure.load();});router->SetRetainWorldGraph(true);
     if(!Current())throw std::runtime_error("walking map changed while opening");
   }
   bool Current()const{
@@ -202,7 +207,7 @@ OfflineWalkingProvider::Result OfflineWalkingProvider::Query(m2::PointD const & 
     // Observe caller cancellation at native callbacks and final publication without changing its deadline.
     delegate.SetProgressCallback([&](float){if(external.IsCancelled())delegate.Cancel();});
     delegate.SetPointCheckCallback([&](ms::LatLon const &){if(external.IsCancelled())delegate.Cancel();});
-    m_impl->router->SetCurrentTimeGetter([departure]{return static_cast<time_t>(departure);});
+    m_impl->departure=static_cast<time_t>(departure);
     Route route("dmaps-offline-walking",0);route.SetRoutingSettings(GetRoutingSettings(VehicleType::Pedestrian));
     auto code=m_impl->router->CalculateRoute(Checkpoints(from,to),m2::PointD::Zero(),false,delegate,route);
     if(external.IsCancelled())return Failure(CancelStatus(external));
