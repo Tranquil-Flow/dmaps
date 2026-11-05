@@ -292,6 +292,9 @@ public final class TimetableRepository implements AutoCloseable
     try (PackDirectory.Guard ignored = mTrust.acquire()) { return searchStopsLocked(text, limit); }
   }
 
+  private static final String FOLDED_NAME = "replace(replace(replace(replace(search_name,'\u00e4','a'),'\u00f6','o'),'\u00fc','u'),'\u00df','ss')";
+  private static final String DIGRAPH_NAME = "replace(replace(replace(replace(search_name,'\u00e4','ae'),'\u00f6','oe'),'\u00fc','ue'),'\u00df','ss')";
+
   private List<Stop> searchStopsLocked(String text, int limit) throws IOException
   {
     if (text == null)
@@ -299,6 +302,7 @@ public final class TimetableRepository implements AutoCloseable
     if (limit < 1 || limit > 50)
       throw new IllegalArgumentException("limit must be 1..50");
     ensureOpen();
+    // The query is folded here, but packs keep marks in search_name, so the same folding is applied to both sides below.
     String q = PackImporter.normalize(text).trim();
     if (q.isEmpty())
       return Collections.emptyList();
@@ -313,7 +317,9 @@ public final class TimetableRepository implements AutoCloseable
     List<String> args = new ArrayList<>();
     for (String w : words)
     {
-      where.append(" AND search_name LIKE ? ESCAPE '\\'");
+      // Bare letters (sudkreuz) or a German digraph (suedkreuz) both reach a stored umlaut (s\u00fcdkreuz).
+      where.append(" AND (").append(FOLDED_NAME).append(" LIKE ? ESCAPE '\\' OR ").append(DIGRAPH_NAME).append(" LIKE ? ESCAPE '\\')");
+      args.add("%" + escapeLike(w) + "%");
       args.add("%" + escapeLike(w) + "%");
     }
     args.add("%" + escapeLike(phrase) + "%");
@@ -322,7 +328,7 @@ public final class TimetableRepository implements AutoCloseable
     {
       Cursor c = mDb.rawQuery("SELECT id, source_id, name, platform, parent_id, lat, lon," +
               " location_type FROM stops WHERE location_type IN (0,1)" + where +
-              " ORDER BY (search_name LIKE ? ESCAPE '\\') DESC, length(search_name), search_name, id LIMIT ?",
+              " ORDER BY (" + FOLDED_NAME + " LIKE ? ESCAPE '\\') DESC, length(search_name), search_name, id LIMIT ?",
           args.toArray(new String[0]));
       List<Stop> out = new ArrayList<>();
       while (c.moveToNext())

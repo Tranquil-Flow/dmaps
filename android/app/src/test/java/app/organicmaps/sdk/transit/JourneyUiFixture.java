@@ -34,6 +34,12 @@ public final class JourneyUiFixture {
   }
   /** Real valid A→B replacement retaining numeric IDs for deterministic publication tests. */
   public void replaceLabels()throws Exception {changeRows("UPDATE stops SET name=name||' B',search_name=search_name||' b'");}
+  /** Authored German names (synthetic, not VBB rows), stored the way the compiler stores them: casefolded with diacritics kept. */
+  public void useGermanStationNames()throws Exception {
+    changeRows("UPDATE stops SET name='S Südkreuz Bhf (Berlin)',search_name='s südkreuz bhf (berlin)' WHERE source_id='S1'",
+        "UPDATE stops SET name='U Görlitzer Bahnhof (Berlin)',search_name='u görlitzer bahnhof (berlin)' WHERE source_id IN ('H1','H1a')",
+        "UPDATE stops SET name='Bärenplatz Straße',search_name='bärenplatz strasse' WHERE source_id IN ('P1','P1a','P1b')");
+  }
   /** Authored multi-word names (synthetic, not VBB rows): station + platform share one phrase; S1 holds the same words reordered. */
   public void useMultiWordStationNames()throws Exception {
     changeRows("UPDATE stops SET name='S+U Berlin Hauptbahnhof',search_name='s+u berlin hauptbahnhof' WHERE source_id IN ('H1','H1a')",
