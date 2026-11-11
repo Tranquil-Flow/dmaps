@@ -284,11 +284,13 @@ void SaveCategoryExtendedData(Writer & writer, CategoryData const & categoryData
 
   SaveStringsArray(writer, categoryData.m_toponyms, "toponyms", indent);
 
-  std::vector<std::string_view> languageCodes;
+  // ConvertLanguageIndexToLanguageCode returns a std::string by value, so the codes are owned here: a string_view
+  // into that temporary dangled and wrote garbage (or nothing readable) to every exported category.
+  std::vector<std::string> languageCodes;
   languageCodes.reserve(categoryData.m_languageCodes.size());
   for (auto const & lang : categoryData.m_languageCodes)
-    if (auto const str = localisation::ConvertLanguageIndexToLanguageCode(lang); !str.empty())
-      languageCodes.push_back(str);
+    if (auto str = localisation::ConvertLanguageIndexToLanguageCode(lang); !str.empty())
+      languageCodes.push_back(std::move(str));
 
   SaveStringsArray(writer, languageCodes, "languageCodes", indent);
 
