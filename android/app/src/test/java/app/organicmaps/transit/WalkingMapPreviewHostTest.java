@@ -74,4 +74,36 @@ public class WalkingMapPreviewHostTest {
       }finally{call(map,"closeWalkingPreview");session.close();}
     }
   }
+  @Test public void newWalkingIntentIsClaimedBeforeTheRecreatedRendererIsActive()throws Exception {
+    MwmActivity map=Robolectric.buildActivity(MwmActivity.class).get();map.setTheme(R.style.MwmTheme);
+    MapController renderer=mock(MapController.class);when(renderer.isRenderingActive()).thenReturn(false);
+    FloatingSearchToolbarController search=mock(FloatingSearchToolbarController.class);MaterialToolbar toolbar=new MaterialToolbar(map);toolbar.setVisibility(View.GONE);when(search.getToolbar()).thenReturn(toolbar);
+    field(map,"mMapController",renderer);field(map,"mSearchController",search);
+    AtomicInteger released=new AtomicInteger();WalkingMapPreviewSession session=new WalkingMapPreviewSession(new double[]{52.5,13.4,52.501,13.401},answer->answer.accept(true),released::incrementAndGet);
+    Intent incoming=new Intent().putExtra(WalkingMapPreviewSession.EXTRA_TOKEN,session.token());
+    WalkingMapOverlay line=mock(WalkingMapOverlay.class);when(line.isCurrent()).thenReturn(true);
+    try(var nativeMap=mockStatic(Map.class);var routes=mockStatic(RoutingController.class);var choose=mockStatic(ChoosePositionMode.class);var overlay=mockStatic(WalkingMapOverlay.class)){
+      nativeMap.when(Map::isEngineCreated).thenReturn(false);routes.when(RoutingController::get).thenReturn(mock(RoutingController.class));choose.when(ChoosePositionMode::get).thenReturn(ChoosePositionMode.None);
+      overlay.when(()->WalkingMapOverlay.show(any(double[].class))).thenReturn(line);
+      try{
+        Method newIntent=MwmActivity.class.getDeclaredMethod("onNewIntent",Intent.class);newIntent.setAccessible(true);newIntent.invoke(map,incoming);
+        assertNotNull("walking handoff must be claimed before renderer readiness, not silently dropped",map.getWindow().getDecorView().findViewWithTag("dmaps-walking-map-panel"));
+        assertTrue(session.isOpen());assertNull("the incoming token must already be one-shot claimed",WalkingMapPreviewSession.claim(session.token()));overlay.verifyNoInteractions();
+        nativeMap.when(Map::isEngineCreated).thenReturn(true);when(renderer.isRenderingActive()).thenReturn(true);field(map,"mWalkingMapResumed",true);
+        Field preview=MwmActivity.class.getDeclaredField("mWalkingPreview");preview.setAccessible(true);((WalkingMapPreviewController)preview.get(map)).resume();Shadows.shadowOf(Looper.getMainLooper()).idle();
+        overlay.verify(()->WalkingMapOverlay.show(any(double[].class)),times(1));
+        call(map,"processIntent");overlay.verify(()->WalkingMapOverlay.show(any(double[].class)),times(1));
+        call(map,"closeWalkingPreview");assertEquals(1,released.get());verify(line,times(1)).close();
+      }finally{call(map,"closeWalkingPreview");session.close();}
+    }
+  }
+  @Test public void unrelatedIntentStillWaitsForRendererReadiness()throws Exception {
+    MwmActivity map=Robolectric.buildActivity(MwmActivity.class).get();map.setTheme(R.style.MwmTheme);
+    MapController renderer=mock(MapController.class);when(renderer.isRenderingActive()).thenReturn(false);field(map,"mMapController",renderer);
+    try(var nativeMap=mockStatic(Map.class);var overlay=mockStatic(WalkingMapOverlay.class)){
+      nativeMap.when(Map::isEngineCreated).thenReturn(false);
+      Method newIntent=MwmActivity.class.getDeclaredMethod("onNewIntent",Intent.class);newIntent.setAccessible(true);newIntent.invoke(map,new Intent());
+      assertNull(map.getWindow().getDecorView().findViewWithTag("dmaps-walking-map-panel"));overlay.verifyNoInteractions();
+    }
+  }
 }

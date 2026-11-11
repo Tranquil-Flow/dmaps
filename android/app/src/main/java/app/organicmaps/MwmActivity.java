@@ -407,11 +407,28 @@ public class MwmActivity extends BaseMwmFragmentActivity
     processIntent();
   }
 
+  /** Claim the process-local walking handoff before a recreated rendering surface is ready.
+   * The preview controller owns its bounded readiness wait; generic map intents still wait for Drape. */
+  private boolean processWalkingPreviewIntent()
+  {
+    final Intent intent = getIntent();
+    if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false))
+      return false;
+    String walkingToken = intent.getStringExtra(WalkingMapPreviewSession.EXTRA_TOKEN);
+    if (walkingToken == null)
+      return false;
+    intent.putExtra(EXTRA_CONSUMED, true);
+    openWalkingPreview(walkingToken);
+    return true;
+  }
+
   /**
-   * Process intents AFTER rendering is initialized.
+   * Process generic map intents AFTER rendering is initialized.
    */
   private void processIntent()
   {
+    if (processWalkingPreviewIntent())
+      return;
     if (!Map.isEngineCreated())
       throw new AssertionError("Must be called with initialized Drape");
 
@@ -419,8 +436,6 @@ public class MwmActivity extends BaseMwmFragmentActivity
     if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false))
       return;
     intent.putExtra(EXTRA_CONSUMED, true);
-    String walkingToken = intent.getStringExtra(WalkingMapPreviewSession.EXTRA_TOKEN);
-    if (walkingToken != null) { openWalkingPreview(walkingToken); return; }
 
     final long categoryId = intent.getLongExtra(EXTRA_CATEGORY_ID, -1);
     final long bookmarkId = intent.getLongExtra(EXTRA_BOOKMARK_ID, -1);
@@ -1289,7 +1304,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
     closeWalkingPreview();
     setIntent(intent);
     super.onNewIntent(intent);
-    if (mMapController.isRenderingActive())
+    if (!processWalkingPreviewIntent() && mMapController.isRenderingActive())
       processIntent();
     if (intent.getAction() != null && intent.getAction().equals(TrackRecordingService.STOP_TRACK_RECORDING))
     {
