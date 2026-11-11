@@ -68,5 +68,7 @@ public final class WalkingMapPreviewController implements AutoCloseable {
     // After the line closes, the session still owns the retained platform identities (or nothing, if invalidated).
     WalkingMapPreviewSession.requireMain();session.prepareReturn(answer);
   }
+  /** Pause never resumes the native source; keep only the unavailable/return presentation. */
+  public void pause(){WalkingMapPreviewSession.requireMain();finish(R.string.journey_map_unavailable);}
   @Override public void close(){WalkingMapPreviewSession.requireMain();finish(0);}
 }

@@ -274,7 +274,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
       public void closed(int message) {
         // The source and line are already retired. Keep only an error/Back panel so a
         // refused preview cannot send Back through the ordinary navigation-cancel path.
-        if (mWalkingPreviewPanel == panel && message != 0 && mWalkingMapResumed) {
+        if (mWalkingPreviewPanel == panel && message != 0) {
           // Keep the closed controller: its session still answers Back with the retained platforms.
           steps.setText(""); instructions.setVisibility(View.GONE);
           directions.setEnabled(false); status.setText(message); return;
@@ -1350,7 +1350,10 @@ public class MwmActivity extends BaseMwmFragmentActivity
   protected void onPause()
   {
     mWalkingMapResumed = false;
-    closeWalkingPreview();
+    mWalkingReturnPending = false;
+    // Retire the temporary native line, but retain a safe Back path after a brief pause.
+    if (mWalkingPreview != null) mWalkingPreview.pause();
+    else closeWalkingPreview();
     if (mOnmapDownloader != null)
       mOnmapDownloader.onPause();
     MwmApplication.from(this).getSensorHelper().removeListener(this);
