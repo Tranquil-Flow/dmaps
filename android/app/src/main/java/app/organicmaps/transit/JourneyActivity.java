@@ -44,7 +44,10 @@ public class JourneyActivity extends AppCompatActivity {
       view.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,keyboard.bottom));return insets;
     });scroll.addView(root);
     dataset=text(root,"");dataset.setTag("dmaps-dataset-status");dataset.setVisibility(View.GONE); // S1 header, above the scope text
-    scope=text(root,getString(R.string.journey_scope));pack=text(root,"");status=text(root,"");
+    scope=text(root,getString(R.string.journey_scope));pack=text(root,"");status=text(root,"");status.setTag("dmaps-journey-status");
+    // Q10: status and dataset text change in place (errors, refresh, a changed result), so a screen reader hears them politely.
+    androidx.core.view.ViewCompat.setAccessibilityLiveRegion(status,androidx.core.view.ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
+    androidx.core.view.ViewCompat.setAccessibilityLiveRegion(dataset,androidx.core.view.ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
     originLabel=text(root,getString(R.string.journey_origin));originQuery=query(root,R.string.journey_origin,true);
     originSearch=button(root,getString(R.string.journey_search_origin),()->model.search(true,originQuery.getText().toString()));
     destinationLabel=text(root,getString(R.string.journey_destination));destinationQuery=query(root,R.string.journey_destination,false);

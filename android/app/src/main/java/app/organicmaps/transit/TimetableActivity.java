@@ -234,6 +234,7 @@ public class TimetableActivity extends AppCompatActivity
     // Dynamic text is its accessibility name; a generic description would
     // replace validity, attribution and failure details for screen readers.
     mDatasetLine = new TextView(c);
+    androidx.core.view.ViewCompat.setAccessibilityLiveRegion(mDatasetLine, androidx.core.view.ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
     mDatasetLine.setId(View.generateViewId());
     mDatasetLine.setTag("dmaps-dataset-status");
     mDatasetLine.setVisibility(View.GONE); // shown only once the first pack read has answered
@@ -321,6 +322,8 @@ public class TimetableActivity extends AppCompatActivity
     // -- Status / board -------------------------------------------------------
     mStatusLine = new TextView(c);
     mStatusLine.setId(View.generateViewId());
+    // Q10: import, search and error outcomes replace this text in place; announce them politely.
+    androidx.core.view.ViewCompat.setAccessibilityLiveRegion(mStatusLine, androidx.core.view.ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
     mStatusLine.setPadding(0, dp(8), 0, dp(8));
     root.addView(mStatusLine);
 

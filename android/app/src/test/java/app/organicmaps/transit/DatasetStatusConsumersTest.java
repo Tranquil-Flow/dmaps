@@ -125,6 +125,13 @@ public class DatasetStatusConsumersTest
 
   private ActivityController<TimetableSurface> tController;
 
+  private TextView tView(TimetableSurface a, String field) throws Exception
+  {
+    Field f = TimetableActivity.class.getDeclaredField(field);
+    f.setAccessible(true);
+    return (TextView) f.get(a);
+  }
+
   private String tText(TimetableSurface a, String field) throws Exception
   {
     Field f = TimetableActivity.class.getDeclaredField(field);
@@ -154,6 +161,8 @@ public class DatasetStatusConsumersTest
       String shown = tText(a, "mDatasetLine");
       assertEquals(row.name, DatasetStatusText.of(a, expected).text(), shown);
       SilentAccessibilityAudit.check(a.findViewById(android.R.id.content),"Timetable-status/"+row.name);
+      SilentAccessibilityAudit.announcesChanges(tView(a, "mDatasetLine"),"Timetable-dataset/"+row.name);
+      SilentAccessibilityAudit.announcesChanges(tView(a, "mStatusLine"),"Timetable-status-line/"+row.name);
       // Pre-existing text is additive-preserved.
       if (row.pack != null && !row.pack.authenticated)
         assertEquals(row.name, a.getString(R.string.transit_unsigned_pack_disclosure), tText(a, "mTrustLine"));
@@ -208,6 +217,8 @@ public class DatasetStatusConsumersTest
       assertEquals(row.name, View.VISIBLE, header.getVisibility());
       assertEquals(row.name, DatasetStatusText.of(a, row.statusFor(DatasetStatus.Scope.JOURNEY)).text(), header.getText().toString());
       SilentAccessibilityAudit.check(a.findViewById(android.R.id.content),"Journey-status/"+row.name);
+      SilentAccessibilityAudit.announcesChanges(header,"Journey-dataset/"+row.name);
+      SilentAccessibilityAudit.announcesChanges(a.findViewById(android.R.id.content).findViewWithTag("dmaps-journey-status"),"Journey-status-line/"+row.name);
       SilentAccessibilityAudit.fieldsInOrder(a.findViewById(android.R.id.content),a.getString(R.string.journey_origin),a.getString(R.string.journey_destination));
       jController.pause().stop().destroy();
       jController = null;

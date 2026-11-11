@@ -29,5 +29,8 @@ final class SilentAccessibilityAudit {
   if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++)count+=visit(((ViewGroup)v).getChildAt(i),state,fields);
   return count;
  }
+ /** Q10: text that changes in place (status, errors, refresh outcome) is announced politely, never interrupting. */
+ static void announcesChanges(View v,String state){assertNotNull(state+" status view missing",v);
+  assertEquals(state+" status text that changes in place must be a polite live region",ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE,ViewCompat.getAccessibilityLiveRegion(v));}
  static void fieldsInOrder(View root,String...expected){List<EditText> fields=new ArrayList<>();visit(root,"form-order",fields);assertEquals("screen form traversal order",expected.length,fields.size());for(int i=0;i<expected.length;i++)assertEquals("screen form traversal order "+i,expected[i],label(fields.get(i)));}
 }
