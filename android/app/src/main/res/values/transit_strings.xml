@@ -152,4 +152,12 @@ Scheduled arrival: %2$s</string>
   <string name="journey_details_collapsed">collapsed</string>
   <string name="journey_departed">The planned departure time has passed. Your platform choices are kept — plan again for current departures.</string>
   <string name="journey_return_reselect">The previous journey cannot be restored. Reload the timetable if needed, select the origin and destination again, then plan a new journey.</string>
+  <string name="journey_od_header">%1$s → %2$s</string>
+  <string name="journey_edit_trip">Edit trip</string>
+  <string name="journey_walkmap_show">About the walking map</string>
+  <string name="journey_walkmap_hide">Hide walking-map notes</string>
+  <string name="journey_walkmap_expanded">expanded</string>
+  <string name="journey_walkmap_collapsed">collapsed</string>
+  <string name="journey_about_data_show">About this data</string>
+  <string name="journey_about_data_hide">Hide data details</string>
 </resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DMaps journey screen role colours. journey_muted is the caveat role: #595959 on the
+     theme's white surface is >= 4.5:1, so collapsing caveat text into this role de-emphasises
+     it without pushing it below readable contrast (consensus risk note: darkening secondary
+     text must not darken caveats below 4.5:1). -->
+<resources>
+  <color name="journey_muted">#595959</color>
+  <color name="journey_primary">#1B4E9B</color>
+  <color name="journey_primary_text">#FFFFFF</color>
+  <color name="journey_outline">#1B4E9B</color>
+</resources>

@@ -13,18 +13,23 @@ import java.time.*;
 import java.time.format.*;
 
 /** Reachable local scheduled preview; rendering accepts explicitly map-bound walking results.
- * Explicit bounded mapped action adds one platform pair; never mutates the global map router. */
+ * Explicit bounded mapped action adds one platform pair; never mutates the global map router.
+ * Visual roles (2026-11 UX panel): facts render at 16sp default colour, caveats at 13sp muted
+ * (#595959, >= 4.5:1), the whole-trip summary leads, material warnings stay visible while purely
+ * technical mechanics collapse behind labelled expanders, and a result footer keeps the mapped-walk
+ * action and an honest "Edit trip" reachable without scrolling. */
 public class JourneyActivity extends AppCompatActivity {
   private JourneyViewModel model;
   private EditText originQuery,destinationQuery;
   private Button originSearch,destinationSearch,plan,walkingPlan;
-  private TextView scope,status,pack,originLabel,destinationLabel,dataset;
+  private TextView scope,status,pack,originLabel,destinationLabel,dataset,dataDetails;
+  private Button aboutData;
   private DatasetStatus.MapFacts mapFacts=DatasetStatus.MapFacts.UNKNOWN; // the one registry capture of the last resume
   private DatasetStatus.MapFacts capturedMapFacts; // written only by the production datasetMapPresence() inside datasetMapFacts()
-  private LinearLayout candidates,platformChoices,legs;
+  private LinearLayout candidates,platformChoices,legs,footer;
+  private ScrollView scroll;
   private final Handler handler=new Handler(Looper.getMainLooper());
   private boolean resumed;
-  private ScrollView scroll;
   // Identity of the result already brought into view; periodic revalidation rebinds the same result and must not jump.
   private JourneyPlanner.Result revealed;
   private final Runnable refreshVisible=new Runnable(){@Override public void run(){
@@ -34,48 +39,85 @@ public class JourneyActivity extends AppCompatActivity {
   @Override protected void onCreate(Bundle saved){
     super.onCreate(saved);setTitle(R.string.journey_title);model=createModel();
     getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-    scroll=new ScrollView(this);LinearLayout root=column();int pad=dp(12);root.setPadding(pad,pad,pad,dp(24));
-    // Inset the fixed viewport, not the scrolling child: content must never scroll
-    // over status/navigation bars, and focused inputs/buttons must clear the IME.
+    // Fixed viewport column: the scroller (weight 1) plus the result footer. Inset the fixed
+    // viewport, not the scrolling child: content must never scroll over status/navigation bars,
+    // and focused inputs/buttons must clear the IME. The scroller clears only the bars; the
+    // footer clears the taller of bars/keyboard so actions stay reachable with the keyboard open.
+    scroll=new ScrollView(this);LinearLayout form=column();int pad=dp(12);form.setPadding(pad,pad,pad,dp(24));
     scroll.setClipToPadding(true);
+    footer=column();footer.setOrientation(LinearLayout.HORIZONTAL);footer.setVisibility(View.GONE);
+    footer.setPadding(dp(8),dp(8),dp(8),0);
     androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scroll,(view,insets)->{
       androidx.core.graphics.Insets bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
       androidx.core.graphics.Insets keyboard=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime());
-      view.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,keyboard.bottom));return insets;
-    });scroll.addView(root);
-    dataset=text(root,"");dataset.setTag("dmaps-dataset-status");dataset.setVisibility(View.GONE); // S1 header, above the scope text
-    scope=text(root,getString(R.string.journey_scope));pack=text(root,"");status=text(root,"");status.setTag("dmaps-journey-status");
+      view.setPadding(bars.left,bars.top,bars.right,bars.bottom);
+      footer.setPadding(footer.getPaddingLeft(),footer.getPaddingTop(),footer.getPaddingRight(),Math.max(bars.bottom,keyboard.bottom));
+      return insets;
+    });
+    // Status cluster first: what this screen is, current state, and the pack trust/validity line.
+    dataset=caveat(form,"");dataset.setTag("dmaps-dataset-status");dataset.setVisibility(View.GONE); // S1 header, above the status text
+    status=text(form,"");status.setTag("dmaps-journey-status");
     // Q10: status and dataset text change in place (errors, refresh, a changed result), so a screen reader hears them politely.
     androidx.core.view.ViewCompat.setAccessibilityLiveRegion(status,androidx.core.view.ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
     androidx.core.view.ViewCompat.setAccessibilityLiveRegion(dataset,androidx.core.view.ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
-    originLabel=text(root,getString(R.string.journey_origin));originQuery=query(root,R.string.journey_origin,true);
-    originSearch=button(root,getString(R.string.journey_search_origin),()->model.search(true,originQuery.getText().toString()));
-    destinationLabel=text(root,getString(R.string.journey_destination));destinationQuery=query(root,R.string.journey_destination,false);
-    destinationSearch=button(root,getString(R.string.journey_search_destination),()->model.search(false,destinationQuery.getText().toString()));
-    candidates=column();root.addView(candidates);platformChoices=column();root.addView(platformChoices);
-    plan=button(root,getString(R.string.journey_plan),model::plan);
-    walkingPlan=button(root,getString(R.string.journey_plan_walking),model::planWithWalking);walkingPlan.setTag("dmaps-plan-walking");
-    text(root,getString(R.string.journey_walk_action_detail_lead));
+    pack=caveat(form,"");
+    // Attribution and authentication details are technical: behind a labelled toggle. The unsigned
+    // disclosure is material and stays visible in the pack line itself (charter: material warnings visible).
+    dataDetails=caveat(form,"");dataDetails.setVisibility(View.GONE);
+    aboutData=flat(form,R.string.journey_about_data_show,()->{});
+    aboutData.setTag("dmaps-about-data");
+    aboutData.setOnClickListener(v->{boolean open=dataDetails.getVisibility()!=View.VISIBLE;dataDetails.setVisibility(open?View.VISIBLE:View.GONE);
+      aboutData.setText(open?R.string.journey_about_data_hide:R.string.journey_about_data_show);
+      androidx.core.view.ViewCompat.setStateDescription(aboutData,getString(open?R.string.journey_details_expanded:R.string.journey_details_collapsed));});
+    androidx.core.view.ViewCompat.setStateDescription(aboutData,getString(R.string.journey_details_collapsed));
+    originLabel=text(form,getString(R.string.journey_origin));originQuery=query(form,R.string.journey_origin,true);
+    originSearch=flat(form,R.string.journey_search_origin,()->model.search(true,originQuery.getText().toString()));
+    destinationLabel=text(form,getString(R.string.journey_destination));destinationQuery=query(form,R.string.journey_destination,false);
+    destinationSearch=flat(form,R.string.journey_search_destination,()->model.search(false,destinationQuery.getText().toString()));
+    candidates=column();form.addView(candidates);platformChoices=column();form.addView(platformChoices);
+    plan=button(form,getString(R.string.journey_plan),model::plan);
+    plan.setBackgroundResource(R.drawable.journey_btn_primary);plan.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_primary_text));
+    walkingPlan=button(form,getString(R.string.journey_plan_walking),model::planWithWalking);walkingPlan.setTag("dmaps-plan-walking");
+    walkingPlan.setBackgroundResource(R.drawable.journey_btn_outline);walkingPlan.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_primary));
+    caveat(form,getString(R.string.journey_walk_action_detail_lead));
     // v0.1 item 3: long technical search mechanics behind an accessible details action; material warnings stay visible.
-    TextView mechanics=text(root,getString(R.string.journey_walk_action_scope));mechanics.setTag("dmaps-walk-action-scope");mechanics.setVisibility(View.GONE);
-    Button details=button(root,getString(R.string.journey_details_show),()->{});details.setTag("dmaps-walk-action-details");
+    TextView mechanics=caveat(form,getString(R.string.journey_walk_action_scope));mechanics.setTag("dmaps-walk-action-scope");mechanics.setVisibility(View.GONE);
+    Button details=button(form,getString(R.string.journey_details_show),()->{});details.setTag("dmaps-walk-action-details");
     details.setOnClickListener(v->{boolean open=mechanics.getVisibility()!=View.VISIBLE;mechanics.setVisibility(open?View.VISIBLE:View.GONE);detailsState(details,open);});
-    root.removeView(details);root.addView(details,root.indexOfChild(mechanics));detailsState(details,false);
-    button(root,getString(R.string.journey_reload),model::refresh);
-    button(root,getString(android.R.string.cancel),()->{model.invalidate(true);model.invalidate(false);});
-    legs=column();root.addView(legs);setContentView(scroll);androidx.core.view.ViewCompat.requestApplyInsets(scroll);model.getState().observe(this,this::bind);
+    form.removeView(details);form.addView(details,form.indexOfChild(mechanics));detailsState(details,false);
+    flat(form,R.string.journey_reload,model::refresh);
+    flat(form,android.R.string.cancel,()->{model.invalidate(true);model.invalidate(false);});
+    // Honest scope prose is material but must not precede the fields and actions in reading order.
+    scope=caveat(form,getString(R.string.journey_scope));
+    legs=column();form.addView(legs);
+    scroll.addView(form);
+    LinearLayout viewport=new LinearLayout(this);viewport.setOrientation(LinearLayout.VERTICAL);
+    viewport.addView(scroll,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,0,1f));
+    viewport.addView(footer,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,LinearLayout.LayoutParams.WRAP_CONTENT));
+    setContentView(viewport);androidx.core.view.ViewCompat.requestApplyInsets(scroll);model.getState().observe(this,this::bind);
   }
   private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
   private void detailsState(Button details,boolean open){
-    details.setText(open?R.string.journey_details_hide:R.string.journey_details_show);details.setAllCaps(false);
+    details.setText(open?R.string.journey_details_hide:R.string.journey_details_show);
     androidx.core.view.ViewCompat.setStateDescription(details,getString(open?R.string.journey_details_expanded:R.string.journey_details_collapsed));
   }
   private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
   private TextView text(LinearLayout parent,String value){
     TextView t=new TextView(this);t.setText(value);t.setTextSize(16);t.setPadding(0,dp(6),0,dp(6));t.setSaveEnabled(false);parent.addView(t);return t;
   }
+  /** Caveat role: limitations and honesty text recede without losing visibility or contrast. */
+  private TextView caveat(LinearLayout parent,String value){
+    TextView t=text(parent,value);t.setTextSize(13);t.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_muted));t.setTag("dmaps-caveat");return t;
+  }
   private Button button(LinearLayout parent,String title,Runnable action){
     Button b=new Button(this);b.setText(title);b.setMinHeight(dp(48));b.setOnClickListener(v->action.run());parent.addView(b);return b;
+  }
+  /** Secondary actions: text-only, no filled chrome, so the primary action is unambiguous. */
+  private Button flat(LinearLayout parent,int title,Runnable action){
+    Button b=button(parent,getString(title),action);
+    b.setBackgroundColor(android.graphics.Color.TRANSPARENT);b.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_primary));
+    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,LinearLayout.LayoutParams.WRAP_CONTENT);
+    p.setMargins(0,0,0,dp(4));b.setLayoutParams(p);return b;
   }
   private EditText query(LinearLayout root,int hint,boolean origin){
     EditText e=new EditText(this);e.setId(View.generateViewId());e.setHint(hint);e.setSaveEnabled(false);
@@ -161,12 +203,43 @@ public class JourneyActivity extends AppCompatActivity {
   }
   private void platformChoices(JourneyViewModel.Endpoint endpoint,boolean origin,boolean busy){
     if(endpoint==null||endpoint.selection.platforms.size()<2)return;
-    text(platformChoices,getString(origin?R.string.journey_choose_origin_platform:R.string.journey_choose_destination_platform));
+    caveat(platformChoices,getString(origin?R.string.journey_choose_origin_platform:R.string.journey_choose_destination_platform));
     for(Stop platform:endpoint.selection.platforms){
       String label=stop(platform);if(platform.platform==null||platform.platform.isEmpty())label+=" · "+getString(R.string.journey_platform_unknown);
       Button pick=button(platformChoices,getString(R.string.journey_platform_choice,label,bounded(platform.sourceId)),()->model.selectPlatform(endpoint.selection,platform.id,origin));
       pick.setAllCaps(false);pick.setTag((origin?"dmaps-origin-platform-":"dmaps-destination-platform-")+platform.id);pick.setEnabled(!busy);
     }
+  }
+  /** Result footer: the mapped-walk action and an honest way back to the form stay reachable
+   * without scrolling. No result, nothing to act on: the footer disappears. */
+  private void renderFooter(JourneyViewModel.State s,JourneyPlanner.Result result,boolean mapped){
+    footer.removeAllViews();
+    if(result==null||!result.found()||result.legs.isEmpty()){footer.setVisibility(View.GONE);return;}
+    footer.setVisibility(View.VISIBLE);
+    for(JourneyPlanner.Leg leg:result.legs)if(leg.isWalking()&&mapped&&result.mapSnapshotId.equals(leg.walk.mapSnapshotId)){
+      Button mapAction=button(footer,getString(R.string.journey_map_action),()->{});
+      mapAction.setTag("dmaps-walk-map-"+leg.walk.fromStopId+"-"+leg.walk.toStopId);
+      mapAction.setEnabled(!s.busy);
+      mapAction.setBackgroundResource(R.drawable.journey_btn_primary);mapAction.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_primary_text));
+      mapAction.setLayoutParams(weighted());
+      mapAction.setOnClickListener(view->{
+        mapAction.setEnabled(false);model.prepareWalkingMap(s,leg.walk,token->{
+          if(token==null){if(resumed)mapAction.setEnabled(true);return;}
+          if(!resumed){WalkingMapPreviewSession.cancelPending(token);return;}
+          try{startActivity(new android.content.Intent(this,app.organicmaps.MwmActivity.class)
+              .putExtra(WalkingMapPreviewSession.EXTRA_TOKEN,token)
+              .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP));}
+          catch(RuntimeException failed){WalkingMapPreviewSession.cancelPending(token);status.setText(R.string.journey_map_unavailable);}
+        });
+      });
+    }
+    Button edit=button(footer,getString(R.string.journey_edit_trip),()->scroll.scrollTo(0,0));
+    edit.setBackgroundResource(R.drawable.journey_btn_outline);edit.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_primary));
+    edit.setLayoutParams(weighted());
+  }
+  private LinearLayout.LayoutParams weighted(){
+    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f);
+    p.setMargins(dp(4),0,dp(4),0);return p;
   }
   private void bind(JourneyViewModel.State s){
     if(s==null)return;boolean usable=model.displayable(s)&&s.info.formatVersion==2;
@@ -176,12 +249,15 @@ public class JourneyActivity extends AppCompatActivity {
     plan.setEnabled(usable&&!s.busy&&s.from!=null&&s.to!=null);walkingPlan.setEnabled(usable&&model.canPlanWithWalking(s));
     originLabel.setText(getString(R.string.journey_origin)+(s.from==null?"":" · "+stop(s.from.stop)));
     destinationLabel.setText(getString(R.string.journey_destination)+(s.to==null?"":" · "+stop(s.to.stop)));
-    status.setText(s.message);pack.setText("");renderDataset(s);
-    candidates.removeAllViews();platformChoices.removeAllViews();legs.removeAllViews();
+    status.setText(s.message);pack.setText("");dataDetails.setText("");renderDataset(s);
+    candidates.removeAllViews();platformChoices.removeAllViews();legs.removeAllViews();footer.setVisibility(View.GONE);footer.removeAllViews();
     if(!usable){if(s.result!=null)status.setText(R.string.journey_changed);return;}
     PackInfo p=s.info;
-    pack.setText(getString(R.string.transit_pack_line,bounded(p.publisher),p.validFrom,p.validUntil)+"\n"
-        +(p.authenticated?getString(R.string.transit_authenticated_pack,p.signingKeyId,p.officialSequence,p.authorizationExpires.toString()):getString(R.string.transit_unsigned_pack_disclosure))
+    // Publisher + exact validity stay visible; the unsigned disclosure is material and stays with them.
+    StringBuilder packLine=new StringBuilder(getString(R.string.transit_pack_line,bounded(p.publisher),p.validFrom,p.validUntil));
+    if(!p.authenticated)packLine.append("\n").append(getString(R.string.transit_unsigned_pack_disclosure));
+    pack.setText(packLine.toString());
+    if(p.authenticated)dataDetails.setText(getString(R.string.transit_authenticated_pack,p.signingKeyId,p.officialSequence,p.authorizationExpires.toString())
         +"\n"+bounded(p.attribution)+" · "+bounded(p.license));
     if(s.candidates!=null&&!s.busy)for(Stop candidate:s.candidates.stops){
       String kind=getString(candidate.locationType==1?R.string.journey_candidate_station:R.string.journey_candidate_boarding);
@@ -193,24 +269,25 @@ public class JourneyActivity extends AppCompatActivity {
     JourneyPlanner.Result result=s.result;if(result==null)return;
     if(result.found()&&!result.legs.isEmpty()){
       summary(result,mapped,p.timezone);
+      TextView od=text(legs,getString(R.string.journey_od_header,stop(s.from.stop),stop(s.to.stop)));od.setTag("dmaps-od-header");
       // UX01: a new plan's summary must not land below the fold; reveal it once per result.
       if(result!=revealed){revealed=result;final View first=legs.getChildAt(0);scroll.post(()->{if(legs.indexOfChild(first)==0)scroll.smoothScrollTo(0,legs.getTop());});}
     }
-    text(legs,getString(mapped?R.string.journey_mapped_connection_scope:R.string.journey_connection_scope));
-    if(!result.completeWithinSuppliedConnections())text(legs,getString(R.string.journey_limited));
-    for(JourneyPlanner.Issue i:result.issues)text(legs,getString(issue(i)));
+    caveat(legs,getString(mapped?R.string.journey_mapped_connection_scope:R.string.journey_connection_scope));
+    if(!result.completeWithinSuppliedConnections())caveat(legs,getString(R.string.journey_limited));
+    for(JourneyPlanner.Issue i:result.issues)caveat(legs,getString(issue(i)));
     if(!result.found())return;
-    if(result.legs.isEmpty()){text(legs,getString(R.string.journey_same_platform));return;}
+    if(result.legs.isEmpty()){caveat(legs,getString(R.string.journey_same_platform));return;}
     TripStop previous=null;boolean walking=false;
     for(JourneyPlanner.Leg leg:result.legs){
       if(leg.isWalking()){
         walking=true;JourneyPlanner.Walk walk=leg.walk;
-        if(!mapped||!result.mapSnapshotId.equals(walk.mapSnapshotId)){text(legs,getString(R.string.journey_walking_unavailable));continue;}
+        if(!mapped||!result.mapSnapshotId.equals(walk.mapSnapshotId)){caveat(legs,getString(R.string.journey_walking_unavailable));continue;}
         text(legs,getString(R.string.journey_walk,walkStop(s,walk.fromStopId),walkStop(s,walk.toStopId),(walk.seconds+59)/60,walk.distanceMeters));
         text(legs,getString(R.string.journey_walk_times,time(leg.departure,p.timezone),time(leg.arrival,p.timezone)));
-        text(legs,getString(R.string.journey_walk_access));
+        caveat(legs,getString(R.string.journey_walk_access));
         if(walk.directionsAvailable){
-          text(legs,getString(R.string.journey_walk_directions));text(legs,getString(R.string.journey_walk_directions_scope));int stepNumber=0;
+          text(legs,getString(R.string.journey_walk_directions));int stepNumber=0;
           for(MappedWalking.Direction direction:walk.directions()){
             int title;switch(direction.maneuver){
               case GO_STRAIGHT:title=R.string.journey_walk_direction_straight;break;
@@ -222,36 +299,37 @@ public class JourneyActivity extends AppCompatActivity {
             TextView instruction=text(legs,getString(R.string.journey_walk_direction_step,++stepNumber,Math.round(direction.distanceFromStartMeters),getString(title)));
             instruction.setTag("dmaps-walk-direction-"+walk.fromStopId+"-"+walk.toStopId+"-"+direction.pointIndex);
           }
-        }else text(legs,getString(R.string.journey_walk_directions_unavailable));
-        Button mapAction=button(legs,getString(R.string.journey_map_action),()->{});
-        mapAction.setTag("dmaps-walk-map-"+walk.fromStopId+"-"+walk.toStopId);
-        mapAction.setEnabled(!s.busy);
-        mapAction.setOnClickListener(view->{
-          mapAction.setEnabled(false);model.prepareWalkingMap(s,walk,token->{
-            if(token==null){if(resumed)mapAction.setEnabled(true);return;}
-            if(!resumed){WalkingMapPreviewSession.cancelPending(token);return;}
-            try{startActivity(new android.content.Intent(this,app.organicmaps.MwmActivity.class)
-                .putExtra(WalkingMapPreviewSession.EXTRA_TOKEN,token)
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP));}
-            catch(RuntimeException failed){WalkingMapPreviewSession.cancelPending(token);status.setText(R.string.journey_map_unavailable);}
-          });
-        });
+        }else caveat(legs,getString(R.string.journey_walk_directions_unavailable));
+        // How-to-read-the-preview notes are technical: behind a labelled toggle (same pattern as
+        // Search details). Material caveats above stay visible.
+        LinearLayout notes=column();notes.setVisibility(View.GONE);
+        caveat(notes,getString(R.string.journey_walk_directions_scope));
+        caveat(notes,getString(R.string.journey_walk_preview));
+        caveat(notes,getString(R.string.journey_walk_preview_legend));
+        Button walkNotes=button(legs,getString(R.string.journey_walkmap_show),()->{});
+        walkNotes.setTag("dmaps-walkmap-details-"+walk.fromStopId+"-"+walk.toStopId);
+        walkNotes.setBackgroundColor(android.graphics.Color.TRANSPARENT);walkNotes.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.journey_primary));
+        walkNotes.setOnClickListener(v->{boolean open=notes.getVisibility()!=View.VISIBLE;notes.setVisibility(open?View.VISIBLE:View.GONE);
+          walkNotes.setText(open?R.string.journey_walkmap_hide:R.string.journey_walkmap_show);
+          androidx.core.view.ViewCompat.setStateDescription(walkNotes,getString(open?R.string.journey_walkmap_expanded:R.string.journey_walkmap_collapsed));});
+        androidx.core.view.ViewCompat.setStateDescription(walkNotes,getString(R.string.journey_walkmap_collapsed));
+        legs.addView(notes);
         try{
           WalkingPathPreview preview=new WalkingPathPreview(this,walk.latLonGeometry());
           preview.setTag("dmaps-walk-preview-"+walk.fromStopId+"-"+walk.toStopId);
           preview.setContentDescription(getString(R.string.journey_walk_preview_description)+" "+getString(R.string.journey_walk_preview_endpoints,walkStop(s,walk.fromStopId),walkStop(s,walk.toStopId)));
-          text(legs,getString(R.string.journey_walk_preview));legs.addView(preview,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(240)));
-          text(legs,getString(R.string.journey_walk_preview_legend));
-        }catch(IllegalArgumentException unsupported){text(legs,getString(R.string.journey_walk_preview_unavailable));}
+          legs.addView(preview,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(240)));
+        }catch(IllegalArgumentException unsupported){caveat(legs,getString(R.string.journey_walk_preview_unavailable));}
         continue;
       }
       if(previous!=null)text(legs,getString(R.string.journey_transfer,stop(leg.board)));
       text(legs,getString(R.string.journey_ride,bounded(leg.board.line),bounded(leg.board.destination),stop(leg.board),time(leg.board.departure,leg.board.timezone)));
       text(legs,getString(R.string.journey_alight,stop(leg.alight),time(leg.alight.arrival,leg.alight.timezone)));
-      if(!Integer.valueOf(1).equals(leg.board.timepoint)||!Integer.valueOf(1).equals(leg.alight.timepoint))text(legs,getString(R.string.journey_approximate));
+      if(!Integer.valueOf(1).equals(leg.board.timepoint)||!Integer.valueOf(1).equals(leg.alight.timepoint))caveat(legs,getString(R.string.journey_approximate));
       previous=leg.alight;
     }
     text(legs,getString(walking?R.string.journey_estimated_arrival:R.string.journey_arrival,time(result.arrival,previous==null?p.timezone:previous.timezone)));
+    renderFooter(s,result,mapped);
   }
   @Override protected void onNewIntent(android.content.Intent intent){super.onNewIntent(intent);setIntent(intent);}
   @Override protected void onResume(){

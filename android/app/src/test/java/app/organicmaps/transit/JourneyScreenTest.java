@@ -83,7 +83,12 @@ public class JourneyScreenTest {
     String summary=((TextView)first).getText().toString();app.organicmaps.sdk.transit.JourneyPlanner.Result planned=injected.getState().getValue().result;
     assertTrue(summary,summary.startsWith("Leave "));assertTrue(summary,summary.contains(" · arrive "));assertTrue(summary,summary.contains(planned.legs.get(0).board.line));
     assertTrue(summary,summary.contains(planned.legs.size()==1?"no change":"change"));assertFalse("summary must not drop the dated detail",summary.contains("Scheduled final arrival"));
-    assertTrue(((TextView)legRows.getChildAt(1)).getText().toString().startsWith("Search:"));
+    TextView odHeader=(TextView)legRows.getChildAt(1);assertEquals("dmaps-od-header",odHeader.getTag());
+    assertTrue(odHeader.getText().toString(),odHeader.getText().toString().contains("→"));
+    assertTrue(odHeader.getText().toString(),odHeader.getText().toString().contains(queries[0]));
+    assertTrue(odHeader.getText().toString(),odHeader.getText().toString().contains(queries[1]));
+    TextView searchCaveat=(TextView)legRows.getChildAt(2);assertTrue(searchCaveat.getText().toString().startsWith("Search:"));
+    assertEquals("caveat role must be visually de-emphasised","dmaps-caveat",searchCaveat.getTag());
     // UX01: the new result is scrolled into view once; periodic revalidation must not keep re-scrolling.
     ScrollView scroller=(ScrollView)legRows.getParent().getParent();Shadows.shadowOf(Looper.getMainLooper()).idle();
     // Robolectric never draws: advance the real OverScroller frame by frame as a draw pass would.
@@ -112,6 +117,12 @@ public class JourneyScreenTest {
     details.performClick();assertEquals(View.VISIBLE,mechanics.getVisibility());assertEquals("Hide search details",details.getText().toString());
     assertEquals("expanded",String.valueOf(androidx.core.view.ViewCompat.getStateDescription(details)));assertTrue(visibleOnly(root).contains("32 platforms"));
     details.performClick();assertEquals(View.GONE,mechanics.getVisibility());
+    ViewGroup column=(ViewGroup)((ViewGroup)root.findViewById(android.R.id.content)).getChildAt(0);
+    ScrollView scroller=(ScrollView)column.getChildAt(0);
+    LinearLayout form=(LinearLayout)scroller.getChildAt(0);
+    TextView scopeText=(TextView)field(a,"scope");Button planButton=(Button)field(a,"plan");
+    assertTrue("the scope prose must not precede the action buttons",form.indexOfChild(scopeText)>form.indexOfChild(planButton));
+    assertTrue("the mapped action keeps its material limits visible as a de-emphasised subtitle",visibleOnly(root).contains("select one explicit platform at each end"));
   }
   private String visibleOnly(View v){
     if(v.getVisibility()!=View.VISIBLE)return "";String s=v instanceof TextView?((TextView)v).getText().toString()+"\n":"";
@@ -152,18 +163,43 @@ public class JourneyScreenTest {
   }
   @Test public void systemBarsAndKeyboardInsetTheScrollableViewportRatherThanScrollingAwayWithContent()throws Exception {
     FixtureActivity a=readyFixtureScreen();ViewGroup content=a.findViewById(android.R.id.content);
-    ScrollView scroll=(ScrollView)content.getChildAt(0);View body=scroll.getChildAt(0);int bodyPadding=body.getPaddingTop();
+    ViewGroup column=(ViewGroup)content.getChildAt(0);assertEquals("viewport column holds the scroller and the action footer",2,column.getChildCount());
+    ScrollView scroll=(ScrollView)column.getChildAt(0);View footer=column.getChildAt(1);View body=scroll.getChildAt(0);int bodyPadding=body.getPaddingTop();
     var bars=androidx.core.graphics.Insets.of(7,29,11,37);
     var shown=new androidx.core.view.WindowInsetsCompat.Builder().setInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars(),bars)
         .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(),androidx.core.graphics.Insets.of(0,0,0,480))
         .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(),true).build();
     androidx.core.view.ViewCompat.dispatchApplyWindowInsets(scroll,shown);
     assertEquals("status-bar exclusion belongs to fixed viewport",29,scroll.getPaddingTop());
-    assertEquals(7,scroll.getPaddingLeft());assertEquals(11,scroll.getPaddingRight());assertEquals(480,scroll.getPaddingBottom());
+    assertEquals(7,scroll.getPaddingLeft());assertEquals(11,scroll.getPaddingRight());
+    assertEquals("scroller clears only the bars; the footer clears the taller of bars/keyboard",37,scroll.getPaddingBottom());
+    assertEquals(480,footer.getPaddingBottom());
     assertEquals("content keeps its ordinary padding, not duplicated system insets",bodyPadding,body.getPaddingTop());assertTrue(scroll.getClipToPadding());
     var hidden=new androidx.core.view.WindowInsetsCompat.Builder(shown).setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(),androidx.core.graphics.Insets.NONE)
         .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(),false).build();
-    androidx.core.view.ViewCompat.dispatchApplyWindowInsets(scroll,hidden);assertEquals(37,scroll.getPaddingBottom());
+    androidx.core.view.ViewCompat.dispatchApplyWindowInsets(scroll,hidden);assertEquals(37,footer.getPaddingBottom());
+  }
+  @Test public void resultFooterOffersEditTripThatReturnsToTheForm()throws Exception {
+    java.time.Clock clock=java.time.Clock.fixed(java.time.Instant.parse("2026-10-21T08:00:00Z"),java.time.ZoneOffset.UTC);
+    app.organicmaps.sdk.transit.JourneyUiFixture fixture=new app.organicmaps.sdk.transit.JourneyUiFixture(RuntimeEnvironment.getApplication(),temp.newFolder(),clock);
+    worker=java.util.concurrent.Executors.newSingleThreadExecutor();injected=new JourneyViewModel(RuntimeEnvironment.getApplication(),fixture.repository,worker,clock);
+    ActivityController<FixtureActivity> c=Robolectric.buildActivity(FixtureActivity.class);FixtureActivity a=c.get();a.fixture=injected;a.setTheme(R.style.MwmTheme);c.create().start().resume().visible();journey=c;
+    await(()->!injected.getState().getValue().busy);
+    java.util.List<app.organicmaps.sdk.transit.TripStop> rows=fixture.repository.tripStops("T1",java.time.LocalDate.parse("2026-10-21"));
+    ((EditText)field(a,"originQuery")).setText(rows.get(0).stopName);((Button)field(a,"originSearch")).performClick();await(()->!injected.getState().getValue().busy);
+    injected.select(injected.getState().getValue().candidates,rows.get(0).stopId,true);await(()->!injected.getState().getValue().busy);
+    ((EditText)field(a,"destinationQuery")).setText(rows.get(rows.size()-1).stopName);((Button)field(a,"destinationSearch")).performClick();await(()->!injected.getState().getValue().busy);
+    injected.select(injected.getState().getValue().candidates,rows.get(rows.size()-1).stopId,false);await(()->!injected.getState().getValue().busy);
+    ((Button)field(a,"plan")).performClick();await(()->!injected.getState().getValue().busy);
+    assertNotNull(injected.getState().getValue().result);
+    ViewGroup content=(ViewGroup)a.getWindow().getDecorView().findViewById(android.R.id.content);
+    ViewGroup column=(ViewGroup)content.getChildAt(0);LinearLayout footer=(LinearLayout)column.getChildAt(1);
+    assertEquals("footer appears with a result",View.VISIBLE,footer.getVisibility());
+    Button edit=button(footer,"Edit trip");assertNotNull("the result needs a visible way back to the form",edit);
+    ScrollView scroller=(ScrollView)column.getChildAt(0);
+    for(int frame=0;frame<120;frame++){Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(16));scroller.computeScroll();}
+    assertTrue("result revealed before edit",scroller.getScrollY()>0);
+    edit.performClick();assertEquals("edit returns to the form",0,scroller.getScrollY());
   }
   @Test public void timetableOffersExplicitLocalJourneyEntryWithoutAlteringBoards(){
     entry=Robolectric.buildActivity(EntryActivity.class);TimetableActivity a=entry.get();a.setTheme(R.style.MwmTheme);entry.create().start().resume().visible();
