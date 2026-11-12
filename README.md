@@ -1,3 +1,47 @@
+# DMaps
+
+**DMaps is an offline, honesty-first transit companion — a [CoMaps](https://github.com/comaps/comaps) fork (itself a community fork of Organic Maps) that adds what city riders actually need: scheduled journey planning, with no fake precision, no tracking, and no accounts.**
+
+Berlin/VBB is the first region. The architecture is region-agnostic — new cities are a timetable pack away.
+
+---
+
+## What DMaps adds over CoMaps / Organic Maps
+
+**1. Offline scheduled transit journey planning.** CoMaps and Organic Maps draw transit lines on the map but cannot plan a journey. DMaps v0.1 plans station-to-station trips on a GTFS-derived timetable pack you import yourself — no server, no internet, no API keys.
+
+**2. Platform-precise endpoints.** Plans start and end at an explicit platform ("S+U Alexanderplatz Bhf · Platform 1 (U5) → S+U Berlin Hauptbahnhof · Platform 2 (U5)"), not a vague station guess. Station search folds umlauts — type `Suedkreuz`, find *S Südkreuz*.
+
+**3. Honesty-first design.** Every screen tells the truth about what the app knows:
+- Your imported pack is labelled **untrusted**: "SHA-256 checks content integrity, not publisher identity."
+- No live departures are claimed. No guaranteed connections. Approximate times say so.
+- The material limits are printed on the screen: *"Search: next 3 hours, at most 3 boardings, same-platform transfers only. No walking to, between or from platforms."*
+- When a departure passes, the plan retires honestly: *"The planned departure time has passed. Your platform choices are kept — plan again for current departures."*
+- When nothing is found: *"No itinerary found in this preview. This does not mean no public transport connection exists."*
+- A broken pack import never destroys your working pack; validity and a recovery path are always visible.
+
+**4. Privacy by construction.** Planning is fully offline. No accounts, no analytics, no network calls. Your timetable data never leaves the device.
+
+**5. Germany-first details.** Europe/Berlin noon-anchored, DST-correct time semantics; German-localised strings; umlaut-folding search.
+
+**6. Evidence-driven engineering.** 672 host tests with 265 UI-state pins guard the transit screens; device campaigns follow a scenario graph; every latency number in the notes comes from a **pre-registered measurement** on sealed bytes; a claims ledger ties user-visible claims to receipts. We think how an app is verified is part of the product.
+
+## Honest limitations of v0.1
+
+- Berlin/VBB pack only (bring your own city later — the format is region-agnostic).
+- Same-platform transfers only; no walking between platforms; no walking to/from stations.
+- No live departures, no delays, no guaranteed connections — scheduled preview only.
+- The mapped walking-link preview takes ~5.5 s on-device (measured; on the v0.2 performance list).
+- The attached APK is a **debug-signed build** for early testers; the release-signed artifact follows our signing ceremony, and our distribution channel will be our own F-Droid repository with GitHub mirroring the identical artifact.
+
+## Provenance
+
+Built from sealed source (`dmaps-autonomous-m4`, seal `578439ca…`, app sha `d63a984b…`). License: Apache-2.0, preserving CoMaps/Organic Maps attribution (verified byte-identical packaging audit). Berlin timetable data © Verkehrsverbund Berlin-Brandenburg (VBB), CC BY 4.0 — imported by you, labelled untrusted by us.
+
+---
+
+*The sections below are the upstream CoMaps README, kept for attribution and upstream documentation.*
+
 <!-- Navigation Bar -->
 <p align="center">
   <a href="https://codeberg.org/comaps#comaps">Project Intro</a> |
